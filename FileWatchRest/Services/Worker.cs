@@ -275,7 +275,7 @@ public partial class Worker : BackgroundService
         {
             try
             {
-                notification.Contents = await File.ReadAllTextAsync(path, ct);
+                notification.Content = await File.ReadAllTextAsync(path, ct);
             }
             catch (Exception ex)
             {

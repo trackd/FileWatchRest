@@ -124,7 +124,7 @@ Packaging for Deployment
 Prepare a deployment package (creates `./output` by default):
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\package_deploy.ps1 -ProjectPath . -OutputDir .\output  
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -ProjectPath FileWatchRest -OutputDir .\output  
 ```
 
 The script automatically creates a deployment package with `install_on_target.ps1`.  
@@ -151,7 +151,8 @@ The service POSTs JSON data to your configured endpoint:
 ```json
 {  
   "Path": "C:\\temp\\watch\\example.txt",  
-  "Contents": null,  
+  "Content": null,  
+  "ComputerName": "Server1",
   "FileSize": 1024,  
   "LastWriteTime": "2025-09-17T10:30:00"  
 }  
@@ -162,7 +163,8 @@ The service POSTs JSON data to your configured endpoint:
 ```json
 {  
   "Path": "C:\\temp\\watch\\example.txt",  
-  "Contents": "file content here...",  
+  "Content": "file content here...",  
+  "ComputerName": "Server2",
   "FileSize": 1024,  
   "LastWriteTime": "2025-09-17T10:30:00"  
 }  
@@ -204,7 +206,7 @@ Native AOT Deployment
 For high-performance deployment with Native AOT:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish_and_install.ps1 -ProjectPath . -NativeAot -Force  
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
 **Requirements**: Visual C++ build tools must be installed on the build machine for Native AOT compilation.  
