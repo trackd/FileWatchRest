@@ -1,0 +1,28 @@
+﻿{
+  "Folders": [
+    "C:\\temp\\watch",
+    "C:\\data\\incoming"
+  ],
+  "ApiEndpoint": "https://api.example.com/files",
+  "BearerToken": "your-bearer-token-here",
+  "PostFileContents": true,
+  "MoveProcessedFiles": true,
+  "ProcessedFolder": "processed",
+  "AllowedExtensions": [
+    ".txt",
+    ".json",
+    ".xml",
+    ".csv"
+  ],
+  "IncludeSubdirectories": true,
+  "DebounceMilliseconds": 1000,
+  "Retries": 3,
+  "RetryDelayMilliseconds": 500,
+  "WatcherMaxRestartAttempts": 3,
+  "WatcherRestartDelayMilliseconds": 1000,
+  "DiagnosticsUrlPrefix": "http://localhost:5005/",
+  "ChannelCapacity": 1000,
+  "MaxParallelSends": 4,
+  "FileWatcherInternalBufferSize": 65536,
+  "WaitForFileReadyMilliseconds": 0
+}

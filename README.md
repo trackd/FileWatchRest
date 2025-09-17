@@ -1,0 +1,224 @@
+﻿FileWatchRest  
+=============  
+
+Modern Windows service that watches folders for new or changed files and POSTs file information (and optionally file contents) to a configured HTTP REST API  
+
+Key Features  
+------------  
+
+- **Multi-folder watching** with real-time configuration updates
+- **Bearer token authentication** for secure API communication
+- **File content processing** with configurable options
+- **Extension-based filtering** to watch only specific file types
+- **Automatic file archiving** to processed folders after successful API calls
+- **Debounced detection** with low-latency posting using bounded channels
+- **Robust error handling** with configurable retry logic and r restart mechanisms
+- **Real-time diagnostics** with structured CSV logging
+- **Native AOT ready** for high-performance deployment
+
+Project Structure  
+-----------------  
+
+The codebase is organized into logical folders for better maintainability:
+
+```note
+FileWatchRest/
+├── Configuration/     # Configuration management classes
+│   ├── ExternalConfiguration.cs
+│   └── ConfigurationService.cs
+├── Services/          # Core service implementations  
+│   ├── Worker.cs
+│   └── DiagnosticsService.cs
+├── Models/           # Data models and JSON contexts
+│   ├── FileNotification.cs
+│   └── JsonContexts.cs
+├── Logging/          # Logging implementations
+│   └── CsvLogger.cs
+└── Program.cs        # Application entry point
+```
+
+Configuration  
+-------------  
+
+The service uses a single JSON configuration file for all settings:
+
+**Configuration File**: `C:\ProgramData\FileWatchRest\FileWatchRest.json`  
+
+This file is created automatically with defaults and can be edited while the service is running. Changes are detected automatically and applied without restarting the service.  
+
+Example configuration:
+
+```json
+{
+  "Folders": [
+    "C:\\temp\\watch",
+    "C:\\data\\incoming"
+  ],
+  "ApiEndpoint": "https://api.example.com/files",
+  "BearerToken": "your-bearer-token-here",
+  "PostFileContents": true,
+  "MoveProcessedFiles": true,
+  "ProcessedFolder": "processed",
+  "AllowedExtensions": [
+    ".txt",
+    ".json",
+    ".xml",
+    ".csv"
+  ],
+  "IncludeSubdirectories": true,
+  "DebounceMilliseconds": 1000,
+  "Retries": 3,
+  "RetryDelayMilliseconds": 500,
+  "WatcherMaxRestartAttempts": 3,
+  "WatcherRestartDelayMilliseconds": 1000,
+  "DiagnosticsUrlPrefix": "http://localhost:5005/",
+  "ChannelCapacity": 1000,
+  "MaxParallelSends": 4,
+  "FileWatcherInternalBufferSize": 65536,
+  "WaitForFileReadyMilliseconds": 0
+}
+```
+
+### Configuration Options
+
+**Core File Watching Settings:**  
+
+- `Folders`: Array of folder paths to watch
+- `ApiEndpoint`: HTTP endpoint to POST file notifications to
+- `BearerToken`: Optional bearer token for API authentication
+- `PostFileContents`: If true, reads and includes file contents in the POST
+- `MoveProcessedFiles`: If true, moves files to processed folder after successful POST
+- `ProcessedFolder`: Name of subfolder to move processed files to (default: "processed"). Files in this folder are automatically excluded from monitoring to prevent infinite loops.
+- `AllowedExtensions`: Array of file extensions to watch (empty = all files)
+- `IncludeSubdirectories`: Whether to watch subfolders
+- `DebounceMilliseconds`: Wait time to debounce file events
+
+**Performance and Reliability Settings:**  
+
+- `Retries`: Number of retry attempts for failed API calls (default: 3)
+- `RetryDelayMilliseconds`: Delay between retry attempts (default: 500)
+- `WatcherMaxRestartAttempts`: Max attempts to restart a failed file watcher (default: 3)
+- `WatcherRestartDelayMilliseconds`: Delay before restarting a watcher (default: 1000)
+- `DiagnosticsUrlPrefix`: URL prefix for diagnostics endpoint (default: "<http://localhost:5005/>")
+- `ChannelCapacity`: Internal channel capacity for pending file events (default: 1000)
+- `MaxParallelSends`: Number of concurrent HTTP senders (default: 4)
+- `FileWatcherInternalBufferSize`: FileSystemWatcher buffer size in bytes (default: 65536)
+- `WaitForFileReadyMilliseconds`: Wait time for files to become ready before processing (default: 0)
+
+Development and Testing  
+-----------------------  
+
+Run locally from repository root:
+
+```powershell
+# Build
+dotnet build FileWatchRest.sln  
+
+# Run as console for testing
+dotnet run --project .\FileWatchRest\FileWatchRest.csproj  
+```
+
+Packaging for Deployment  
+-------------------------  
+
+Prepare a deployment package (creates `./output` by default):
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\package_deploy.ps1 -ProjectPath . -OutputDir .\output  
+```
+
+The script automatically creates a deployment package with `install_on_target.ps1`.  
+
+Installation on Target Machine  
+-------------------------------  
+
+1. Copy the entire `output` folder to the target machine
+2. As Administrator, run from inside the `output` folder:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass .\install_on_target.ps1  
+```
+
+This installs files to `C:\Program Files\FileWatchRest`, creates and starts the Windows service, and sets up the configuration directory under `C:\ProgramData\FileWatchRest`.  
+
+API Payload Format  
+------------------  
+
+The service POSTs JSON data to your configured endpoint:
+
+### Basic File Notification (PostFileContents: false)
+
+```json
+{  
+  "Path": "C:\\temp\\watch\\example.txt",  
+  "Contents": null,  
+  "FileSize": 1024,  
+  "LastWriteTime": "2025-09-17T10:30:00"  
+}  
+```
+
+### Full File Notification (PostFileContents: true)
+
+```json
+{  
+  "Path": "C:\\temp\\watch\\example.txt",  
+  "Contents": "file content here...",  
+  "FileSize": 1024,  
+  "LastWriteTime": "2025-09-17T10:30:00"  
+}  
+```
+
+Logging  
+-------  
+
+- **Location**: `C:\ProgramData\FileWatchRest\logs\`
+- **Format**: Structured CSV files with columns: Timestamp (UTC ISO), Level, Category, Message, Exception
+- **Rotation**: One file per service run (`FileWatchRest_yyyyMMdd_HHmmss.csv`)
+
+Troubleshooting  
+---------------  
+
+### Service Won't Start
+
+- Run the executable directly from command prompt to see console errors
+- Check Windows Event Log for startup failures
+- Verify configuration file exists and is valid JSON
+
+### Files Not Being Detected
+
+- Check that folder paths in configuration exist and are accessible
+- Verify file extensions match `AllowedExtensions` if specified
+- Review CSV logs for watcher errors or restart attempts
+- **Note**: Files in folders matching the `ProcessedFolder` configuration value are automatically ignored to prevent infinite processing loops
+
+### API Calls Failing
+
+- Verify `ApiEndpoint` is correct and accessible
+- Check `BearerToken` if API requires authentication
+- Review retry settings in `appsettings.json`
+- Check CSV logs for HTTP status codes
+
+Native AOT Deployment  
+----------------------  
+
+For high-performance deployment with Native AOT:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish_and_install.ps1 -ProjectPath . -NativeAot -Force  
+```
+
+**Requirements**: Visual C++ build tools must be installed on the build machine for Native AOT compilation.  
+
+Configuration Management  
+-------------------------  
+
+- **Single Configuration File**: All settings are now in one place - `FileWatchRest.json`
+- Configuration changes are detected automatically - no service restart required
+- Invalid JSON will cause service to use previous valid configuration
+- Default configuration is created automatically on first run
+- Configuration file can be edited manually or through automated deployment scripts
+- No need for separate `appsettings.json` modifications
+
+---
+
+*FileWatchRest - Modern file watching service with REST API integration*

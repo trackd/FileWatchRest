@@ -1,0 +1,25 @@
+# Build artifacts
+*/bin/*
+*/obj/*
+bin/
+obj/
+
+# IDE files
+.vs/
+.vscode/
+
+# Output and deployment
+output/
+
+# Test files
+test_alc.ps1
+testimages.ps1
+testimages/
+testdata/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# User-specific files
+*.user
