@@ -1,15 +1,14 @@
 <#
 Package the app for deployment on target machine and produce output folder with helper installer script
 Usage:
-  pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\package_deploy.ps1 -ProjectPath . -OutputDir .\output
+  pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -ProjectPath . -OutputDir .\output
 
 Parameters:
   -ProjectPath : path to project/solution (default: .)
   -OutputDir   : folder to create containing publish artifacts + installer (default: .\output)
-  -WatchedFoldersSource : path to watched-folders.txt to include (default: .\watched-folders.txt)
 #>
 param(
-    [string]$ProjectPath = '.',
+    [string]$ProjectPath = 'FileWatchRest',
     [string]$OutputDir = '.\output'
 )
 
@@ -56,9 +55,6 @@ New-Item -ItemType Directory -Path $OutputDir | Out-Null
 # copy publish files
 Copy-Item -Path (Join-Path $publishDir '*') -Destination $OutputDir -Recurse -Force -Exclude '*.pdb'
 
-# include watched-folders.txt
-if (Test-Path $WatchedFoldersSource) { Copy-Item -Path $WatchedFoldersSource -Destination $OutputDir -Force }
-
 # create installer script for target machine
 # Use single-quoted here-string to avoid expanding variables inside the installer script
 $installer = @'
@@ -78,11 +74,6 @@ if (-not (Test-Path $installDir)) { New-Item -ItemType Directory -Path $installD
 # copy files from package dir (this script is expected to be run from the package folder)
 Get-ChildItem -Path $PSScriptRoot -Exclude '*.ps1' | ForEach-Object {
     Copy-Item -Path $_.FullName -Destination $installDir -Recurse -Force
-}
-
-# copy watched-folders.txt if present
-if (Test-Path (Join-Path $PSScriptRoot 'watched-folders.txt')) {
-    Copy-Item -Path (Join-Path $PSScriptRoot 'watched-folders.txt') -Destination $installDir -Force
 }
 
 # create ProgramData log folder
