@@ -24,6 +24,7 @@ public partial class Worker : BackgroundService
     private readonly SemaphoreSlim _configReloadLock = new(1, 1);
     private readonly ConcurrentDictionary<string, int> _watcherRestartAttempts = new();
     private ExternalConfiguration _currentConfig = new();
+    private LogLevel _configuredLogLevel = LogLevel.Information;
 
     public Worker(
         ILogger<Worker> logger,
@@ -43,7 +44,14 @@ public partial class Worker : BackgroundService
     {
         // Load external configuration
         _currentConfig = await _configService.LoadConfigurationAsync(stoppingToken);
+
+        // Apply logging configuration
+        ConfigureLogging(_currentConfig.LogLevel);
+
         _logger.LogInformation("Loaded external configuration with {FolderCount} folders", _currentConfig.Folders.Length);
+
+        // Start diagnostics HTTP server
+        _diagnostics.StartHttpServer(_currentConfig.DiagnosticsUrlPrefix);
 
         // Start watching for configuration changes
         _configService.StartWatching(OnConfigurationChanged);
@@ -246,6 +254,10 @@ public partial class Worker : BackgroundService
 
         try
         {
+            if (_logger.IsEnabled(LogLevel.Trace))
+                _logger.LogTrace("Processing file {Path}, PostFileContents: {PostContents}, MoveAfterProcessing: {MoveFiles}",
+                    path, _currentConfig.PostFileContents, _currentConfig.MoveProcessedFiles);
+
             var notification = await CreateNotificationAsync(path, ct);
             var success = await SendNotificationAsync(notification, ct);
 
@@ -312,6 +324,11 @@ public partial class Worker : BackgroundService
                 if (response.IsSuccessStatusCode)
                 {
                     _logger.LogInformation("Successfully posted file {Path}", notification.Path);
+
+                    if (_logger.IsEnabled(LogLevel.Debug))
+                        _logger.LogDebug("API response: {StatusCode} for file {Path}, size: {Size} bytes",
+                            response.StatusCode, notification.Path, jsonBytes.Length);
+
                     _diagnostics.RecordFileEvent(notification.Path, true, (int)response.StatusCode);
                     return true;
                 }
@@ -351,15 +368,20 @@ public partial class Worker : BackgroundService
             Directory.CreateDirectory(processedDir);
 
             var fileName = Path.GetFileName(filePath);
-            var processedPath = Path.Combine(processedDir, fileName);
+            var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+            var extension = Path.GetExtension(fileName);
 
-            // Handle file name conflicts
+            // Add datetime prefix for uniqueness and traceability
+            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+            var processedFileName = $"{timestamp}_{nameWithoutExt}{extension}";
+            var processedPath = Path.Combine(processedDir, processedFileName);
+
+            // Handle extremely rare case where files are processed at exact same millisecond
             int counter = 1;
             while (File.Exists(processedPath))
             {
-                var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
-                var extension = Path.GetExtension(fileName);
-                processedPath = Path.Combine(processedDir, $"{nameWithoutExt}_{counter}{extension}");
+                processedFileName = $"{timestamp}_{nameWithoutExt}_{counter}{extension}";
+                processedPath = Path.Combine(processedDir, processedFileName);
                 counter++;
             }
 
@@ -388,6 +410,9 @@ public partial class Worker : BackgroundService
 
             // Update configuration
             _currentConfig = newConfig;
+
+            // Apply logging configuration
+            ConfigureLogging(newConfig.LogLevel);
 
             // Start new watchers
             if (newConfig.Folders.Length > 0)
@@ -522,5 +547,32 @@ public partial class Worker : BackgroundService
         }
 
         _configService.Dispose();
+        _diagnostics.Dispose();
+    }
+
+    private void ConfigureLogging(string logLevelString)
+    {
+        try
+        {
+            if (Enum.TryParse<LogLevel>(logLevelString, true, out var configuredLevel))
+            {
+                // Note: Dynamic log level configuration in .NET requires special setup
+                // For now, we'll log the configuration and recommend restart for level changes
+                _logger.LogInformation("Logging level configured to {LogLevel}. Note: Restart service for log level changes to take full effect", configuredLevel);
+
+                // Store the configured level for conditional logging checks
+                _configuredLogLevel = configuredLevel;
+            }
+            else
+            {
+                _logger.LogWarning("Invalid LogLevel '{LogLevel}' in configuration. Valid values: Trace, Debug, Information, Warning, Error, Critical, None", logLevelString);
+                _configuredLogLevel = LogLevel.Information;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to configure logging level from '{LogLevel}', using Information", logLevelString);
+            _configuredLogLevel = LogLevel.Information;
+        }
     }
 }

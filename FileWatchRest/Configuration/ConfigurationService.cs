@@ -42,6 +42,76 @@ public class ConfigurationService
             var json = await File.ReadAllTextAsync(_configFilePath, cancellationToken);
             var config = JsonSerializer.Deserialize(json, MyJsonContext.Default.ExternalConfiguration);
 
+            if (config is not null)
+            {
+                // Decrypt the bearer token if it's encrypted
+                if (!string.IsNullOrWhiteSpace(config.BearerToken))
+                {
+                    _logger.LogDebug("Checking bearer token encryption status. Token starts with 'enc:': {IsEncrypted}",
+                        config.BearerToken.StartsWith("enc:"));
+
+                    try
+                    {
+                        if (OperatingSystem.IsWindows() && SecureConfigurationHelper.IsTokenEncrypted(config.BearerToken))
+                        {
+                            _logger.LogInformation("Encrypted token detected, decrypting for runtime use");
+                            // Create a copy for runtime use with decrypted token
+                            var runtimeConfig = new ExternalConfiguration
+                            {
+                                Folders = config.Folders,
+                                ApiEndpoint = config.ApiEndpoint,
+                                BearerToken = SecureConfigurationHelper.DecryptBearerToken(config.BearerToken),
+                                PostFileContents = config.PostFileContents,
+                                ProcessedFolder = config.ProcessedFolder,
+                                MoveProcessedFiles = config.MoveProcessedFiles,
+                                AllowedExtensions = config.AllowedExtensions,
+                                IncludeSubdirectories = config.IncludeSubdirectories,
+                                DebounceMilliseconds = config.DebounceMilliseconds,
+                                Retries = config.Retries,
+                                RetryDelayMilliseconds = config.RetryDelayMilliseconds,
+                                WatcherMaxRestartAttempts = config.WatcherMaxRestartAttempts,
+                                WatcherRestartDelayMilliseconds = config.WatcherRestartDelayMilliseconds,
+                                DiagnosticsUrlPrefix = config.DiagnosticsUrlPrefix,
+                                ChannelCapacity = config.ChannelCapacity,
+                                MaxParallelSends = config.MaxParallelSends,
+                                FileWatcherInternalBufferSize = config.FileWatcherInternalBufferSize,
+                                WaitForFileReadyMilliseconds = config.WaitForFileReadyMilliseconds
+                            };
+
+                            lock (_configLock)
+                            {
+                                _currentConfig = runtimeConfig;
+                                return _currentConfig;
+                            }
+                        }
+                        else if (OperatingSystem.IsWindows())
+                        {
+                            // Plain text token found - encrypt it and save back to file
+                            _logger.LogInformation("Found plain text bearer token, encrypting for secure storage");
+
+                            // Save the configuration with encrypted token
+                            await SaveConfigurationAsync(config, cancellationToken);
+
+                            // Return the runtime config with plain text token for use
+                            lock (_configLock)
+                            {
+                                _currentConfig = config;
+                                return _currentConfig;
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Windows encryption not available - bearer token will remain in plain text");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to decrypt bearer token, treating as plain text");
+                        // Continue with the original config if decryption fails
+                    }
+                }
+            }
+
             lock (_configLock)
             {
                 _currentConfig = config ?? new ExternalConfiguration();
@@ -63,12 +133,37 @@ public class ConfigurationService
     {
         try
         {
-            var json = JsonSerializer.Serialize(config, MyJsonContext.Default.ExternalConfiguration);
+            // Create a copy for saving with encrypted bearer token
+            var saveConfig = new ExternalConfiguration
+            {
+                Folders = config.Folders,
+                ApiEndpoint = config.ApiEndpoint,
+                BearerToken = OperatingSystem.IsWindows()
+                    ? SecureConfigurationHelper.EnsureTokenIsEncrypted(config.BearerToken)
+                    : config.BearerToken,
+                PostFileContents = config.PostFileContents,
+                ProcessedFolder = config.ProcessedFolder,
+                MoveProcessedFiles = config.MoveProcessedFiles,
+                AllowedExtensions = config.AllowedExtensions,
+                IncludeSubdirectories = config.IncludeSubdirectories,
+                DebounceMilliseconds = config.DebounceMilliseconds,
+                Retries = config.Retries,
+                RetryDelayMilliseconds = config.RetryDelayMilliseconds,
+                WatcherMaxRestartAttempts = config.WatcherMaxRestartAttempts,
+                WatcherRestartDelayMilliseconds = config.WatcherRestartDelayMilliseconds,
+                DiagnosticsUrlPrefix = config.DiagnosticsUrlPrefix,
+                ChannelCapacity = config.ChannelCapacity,
+                MaxParallelSends = config.MaxParallelSends,
+                FileWatcherInternalBufferSize = config.FileWatcherInternalBufferSize,
+                WaitForFileReadyMilliseconds = config.WaitForFileReadyMilliseconds
+            };
+
+            var json = JsonSerializer.Serialize(saveConfig, MyJsonContext.Default.ExternalConfiguration);
             await File.WriteAllTextAsync(_configFilePath, json, cancellationToken);
 
             lock (_configLock)
             {
-                _currentConfig = config;
+                _currentConfig = config; // Store the runtime config (with decrypted token)
             }
 
             _logger.LogInformation("Configuration saved to {Path}", _configFilePath);
@@ -112,6 +207,12 @@ public class ConfigurationService
             // Small delay to avoid reading while file is being written
             await Task.Delay(250);
 
+            // Clear the cached config to force reload
+            lock (_configLock)
+            {
+                _currentConfig = null;
+            }
+
             var newConfig = await LoadConfigurationAsync();
             onConfigChanged(newConfig);
 
@@ -146,7 +247,10 @@ public class ConfigurationService
             ChannelCapacity = 1000,
             MaxParallelSends = 4,
             FileWatcherInternalBufferSize = 64 * 1024,
-            WaitForFileReadyMilliseconds = 0
+            WaitForFileReadyMilliseconds = 0,
+
+            // Logging configuration
+            LogLevel = "Information"
         };
 
         await SaveConfigurationAsync(defaultConfig, cancellationToken);

@@ -85,7 +85,7 @@ Example configuration:
 
 - `Folders`: Array of folder paths to watch
 - `ApiEndpoint`: HTTP endpoint to POST file notifications to
-- `BearerToken`: Optional bearer token for API authentication
+- `BearerToken`: Bearer token for API authentication. **Automatically encrypted** using machine-specific encryption when saved. Plain text tokens are automatically encrypted on first save.
 - `PostFileContents`: If true, reads and includes file contents in the POST
 - `MoveProcessedFiles`: If true, moves files to processed folder after successful POST
 - `ProcessedFolder`: Name of subfolder to move processed files to (default: "processed"). Files in this folder are automatically excluded from monitoring to prevent infinite loops.
@@ -104,6 +104,18 @@ Example configuration:
 - `MaxParallelSends`: Number of concurrent HTTP senders (default: 4)
 - `FileWatcherInternalBufferSize`: FileSystemWatcher buffer size in bytes (default: 65536)
 - `WaitForFileReadyMilliseconds`: Wait time for files to become ready before processing (default: 0)
+
+Security Features  
+-----------------  
+
+**Automatic Token Encryption**: Bearer tokens are automatically encrypted using `System.Security.Cryptography.ProtectedData` with machine-specific encryption. This means:
+
+- Plain text bearer tokens are automatically encrypted when the configuration is first saved
+- Encrypted tokens can only be decrypted on the same machine by the same application
+- Configuration files are safe to store in version control (tokens are encrypted)
+- No master password or key management required - Windows handles the encryption keys
+
+**Migration Support**: Existing plain text tokens are automatically detected and encrypted on the next configuration save without requiring user intervention.nd POSTs file information (and optionally file contents) to a configured HTTP REST API  
 
 Development and Testing  
 -----------------------  
@@ -169,6 +181,80 @@ The service POSTs JSON data to your configured endpoint:
   "LastWriteTime": "2025-09-17T10:30:00"  
 }  
 ```
+
+📊 Diagnostics Endpoints  
+-----------------------  
+
+The service provides a built-in HTTP server for real-time diagnostics and monitoring. The server runs on the URL specified by `DiagnosticsUrlPrefix` (default: `http://localhost:5005/`).
+
+### Available Endpoints
+
+| Endpoint | Description | Response Format |
+|----------|-------------|-----------------|
+| `GET /` | Complete service status (same as `/status`) | JSON |
+| `GET /status` | Full service metrics and diagnostics | JSON |
+| `GET /health` | Simple health check | JSON |
+| `GET /events` | Recent file processing events (last 500) | JSON |
+| `GET /watchers` | Currently active folder watchers | JSON |
+
+### Sample Responses
+
+**GET /status**
+```json
+{
+  "ActiveWatchers": ["C:\\temp\\watch", "C:\\data\\incoming"],
+  "RestartAttempts": {},
+  "RecentEvents": [
+    {
+      "Path": "C:\\temp\\watch\\document.txt",
+      "Timestamp": "2025-09-18T14:30:22.123Z",
+      "PostedSuccess": true,
+      "StatusCode": 200
+    }
+  ],
+  "Timestamp": "2025-09-18T14:30:22.456Z",
+  "EventCount": 15
+}
+```
+
+**GET /health**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-09-18T14:30:22.456Z"
+}
+```
+
+**GET /events**
+```json
+[
+  {
+    "Path": "C:\\temp\\watch\\file1.txt",
+    "Timestamp": "2025-09-18T14:30:22.123Z",
+    "PostedSuccess": true,
+    "StatusCode": 200
+  },
+  {
+    "Path": "C:\\temp\\watch\\file2.txt", 
+    "Timestamp": "2025-09-18T14:29:15.456Z",
+    "PostedSuccess": false,
+    "StatusCode": 500
+  }
+]
+```
+
+**Features:**
+- **Lightweight**: HttpListener-based, no ASP.NET Core overhead
+- **Real-time monitoring**: See file processing events as they happen
+- **CORS enabled**: Browser-accessible from any origin  
+- **Error tracking**: Monitor failed API calls and retry attempts
+- **Service health**: Quick health checks for monitoring systems
+
+**Usage:**
+1. Start the FileWatchRest service
+2. Open browser to `http://localhost:5005/status`
+3. Monitor file processing in real-time
+4. Use `/events` for troubleshooting failed file processing
 
 Logging  
 -------  
