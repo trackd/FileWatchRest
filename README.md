@@ -185,7 +185,7 @@ The service POSTs JSON data to your configured endpoint:
 📊 Diagnostics Endpoints  
 -----------------------  
 
-The service provides a built-in HTTP server for real-time diagnostics and monitoring. The server runs on the URL specified by `DiagnosticsUrlPrefix` (default: `http://localhost:5005/`).
+The service provides a built-in HTTP server for real-time diagnostics and monitoring. The server runs on the URL specified by `DiagnosticsUrlPrefix` (default: `http://localhost:5005/`).  
 
 ### Available Endpoints
 
@@ -199,7 +199,8 @@ The service provides a built-in HTTP server for real-time diagnostics and monito
 
 ### Sample Responses
 
-**GET /status**
+**GET /status**  
+
 ```json
 {
   "ActiveWatchers": ["C:\\temp\\watch", "C:\\data\\incoming"],
@@ -217,7 +218,8 @@ The service provides a built-in HTTP server for real-time diagnostics and monito
 }
 ```
 
-**GET /health**
+**GET /health**  
+
 ```json
 {
   "status": "healthy",
@@ -225,7 +227,8 @@ The service provides a built-in HTTP server for real-time diagnostics and monito
 }
 ```
 
-**GET /events**
+**GET /events**  
+
 ```json
 [
   {
@@ -243,14 +246,16 @@ The service provides a built-in HTTP server for real-time diagnostics and monito
 ]
 ```
 
-**Features:**
+**Features:**  
+
 - **Lightweight**: HttpListener-based, no ASP.NET Core overhead
 - **Real-time monitoring**: See file processing events as they happen
 - **CORS enabled**: Browser-accessible from any origin  
 - **Error tracking**: Monitor failed API calls and retry attempts
 - **Service health**: Quick health checks for monitoring systems
 
-**Usage:**
+**Usage:**  
+
 1. Start the FileWatchRest service
 2. Open browser to `http://localhost:5005/status`
 3. Monitor file processing in real-time
