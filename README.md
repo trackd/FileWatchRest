@@ -115,7 +115,7 @@ Security Features
 - Configuration files are safe to store in version control (tokens are encrypted)
 - No master password or key management required - Windows handles the encryption keys
 
-**Migration Support**: Existing plain text tokens are automatically detected and encrypted on the next configuration save without requiring user intervention.nd POSTs file information (and optionally file contents) to a configured HTTP REST API  
+**Migration Support**: Existing plain text tokens are automatically detected and encrypted on the next configuration save without requiring user intervention.
 
 Development and Testing  
 -----------------------  
@@ -315,3 +315,4 @@ Configuration Management
 ---
 
 *FileWatchRest - Modern file watching service with REST API integration*
+
