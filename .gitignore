@@ -23,3 +23,7 @@ Thumbs.db
 
 # User-specific files
 *.user
+
+.github/chatmodes/*
+.github/instructions/*
+.github/prompts/*
