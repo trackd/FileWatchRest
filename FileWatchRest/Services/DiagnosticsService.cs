@@ -1,12 +1,4 @@
-﻿using System.Collections.Concurrent;
-using System.Net;
-using System.Text.Json;
-using System.Text;
-using FileWatchRest.Models;
-
-namespace FileWatchRest.Services;
-
-public record FileEventRecord(string Path, DateTimeOffset Timestamp, bool PostedSuccess, int? StatusCode);
+﻿namespace FileWatchRest.Services;
 
 public class DiagnosticsService : IDisposable
 {
@@ -17,10 +9,20 @@ public class DiagnosticsService : IDisposable
     private HttpListener? _httpListener;
     private CancellationTokenSource? _cancellationTokenSource;
     private Task? _serverTask;
+    private readonly Meter _meter = new("FileWatchRest.Metrics", "1.0.0");
+    private readonly Counter<long> _processedSuccessCounter;
+    private readonly Counter<long> _processedFailureCounter;
+    private long _enqueuedTotal;
+    private long _processedSuccessTotal;
+    private long _processedFailureTotal;
+    // Track circuit state per endpoint for diagnostics
+    private readonly ConcurrentDictionary<string, CircuitStateInfo> _circuitStates = new();
 
     public DiagnosticsService(ILogger<DiagnosticsService> logger)
     {
         _logger = logger;
+        _processedSuccessCounter = _meter.CreateCounter<long>("file_processed_success_total");
+        _processedFailureCounter = _meter.CreateCounter<long>("file_processed_failure_total");
     }
 
     public void StartHttpServer(string urlPrefix)
@@ -30,7 +32,10 @@ public class DiagnosticsService : IDisposable
 
         try
         {
-            _logger.LogInformation("Attempting to start diagnostics HTTP server at {Url}", urlPrefix);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Attempting to start diagnostics HTTP server at {Url}", urlPrefix);
+            }
 
             _httpListener = new HttpListener();
             _httpListener.Prefixes.Add(urlPrefix);
@@ -39,15 +44,24 @@ public class DiagnosticsService : IDisposable
             _cancellationTokenSource = new CancellationTokenSource();
             _serverTask = Task.Run(() => HandleHttpRequests(_cancellationTokenSource.Token));
 
-            _logger.LogInformation("Diagnostics HTTP server started successfully at {Url}", urlPrefix);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Diagnostics HTTP server started successfully at {Url}", urlPrefix);
+            }
         }
         catch (HttpListenerException ex)
         {
-            _logger.LogError(ex, "Failed to start diagnostics HTTP server at {Url}. Error code: {ErrorCode}. This may require administrator permissions or the URL may be reserved by another application.", urlPrefix, ex.ErrorCode);
+            if (_logger.IsEnabled(LogLevel.Error))
+            {
+                _logger.LogError(ex, "Failed to start diagnostics HTTP server at {Url}. Error code: {ErrorCode}. This may require administrator permissions or the URL may be reserved by another application.", urlPrefix, ex.ErrorCode);
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to start diagnostics HTTP server at {Url}", urlPrefix);
+            if (_logger.IsEnabled(LogLevel.Error))
+            {
+                _logger.LogError(ex, "Failed to start diagnostics HTTP server at {Url}", urlPrefix);
+            }
         }
     }
 
@@ -117,7 +131,8 @@ public class DiagnosticsService : IDisposable
                             ActiveWatchers = GetActiveWatchers(),
                             RestartAttempts = GetRestartAttemptsSnapshot(),
                             RecentEvents = GetRecentEvents(200),
-                            Timestamp = DateTimeOffset.UtcNow,
+                            CircuitStates = GetCircuitStatesSnapshot(),
+                            Timestamp = DateTimeOffset.Now,
                             EventCount = _events.Count
                         };
                         responseText = JsonSerializer.Serialize(status, typeof(DiagnosticStatus), MyJsonContext.Default);
@@ -125,7 +140,7 @@ public class DiagnosticsService : IDisposable
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Failed to serialize status response");
-                        responseText = $"{{\"error\":\"Serialization failed\",\"message\":\"{ex.Message.Replace("\"", "\\\"")}\",\"timestamp\":\"{DateTimeOffset.UtcNow:O}\"}}";
+                        responseText = $"{{\"error\":\"Serialization failed\",\"message\":\"{ex.Message.Replace("\"", "\\\"")}\",\"timestamp\":\"{DateTimeOffset.Now:O}\"}}";
                     }
                     break;
 
@@ -135,19 +150,19 @@ public class DiagnosticsService : IDisposable
                         var health = new HealthStatus
                         {
                             Status = "healthy",
-                            Timestamp = DateTimeOffset.UtcNow
+                            Timestamp = DateTimeOffset.Now
                         };
                         responseText = JsonSerializer.Serialize(health, typeof(HealthStatus), MyJsonContext.Default);
                     }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Failed to serialize health response");
-                        responseText = $"{{\"status\":\"healthy\",\"timestamp\":\"{DateTimeOffset.UtcNow:O}\",\"serializationError\":\"{ex.Message.Replace("\"", "\\\"")}\"}}";
+                        responseText = $"{{\"status\":\"healthy\",\"timestamp\":\"{DateTimeOffset.Now:O}\",\"serializationError\":\"{ex.Message.Replace("\"", "\\\"")}\"}}";
                     }
                     break;
 
                 case "/test":
-                    responseText = "{\"message\":\"Hello from FileWatchRest diagnostics\",\"timestamp\":\"" + DateTimeOffset.UtcNow.ToString("O") + "\"}";
+                    responseText = "{\"message\":\"Hello from FileWatchRest diagnostics\",\"timestamp\":\"" + DateTimeOffset.Now.ToString("O") + "\"}";
                     break;
 
                 case "/events":
@@ -160,12 +175,33 @@ public class DiagnosticsService : IDisposable
                     responseText = JsonSerializer.Serialize(watchers, typeof(string[]), MyJsonContext.Default);
                     break;
 
+                case "/metrics":
+                    // Expose Prometheus plaintext format (a small subset) for simplicity
+                    var sb = new StringBuilder();
+                    sb.AppendLine("# HELP file_processed_success_total Number of successfully posted files");
+                    sb.AppendLine("# TYPE file_processed_success_total counter");
+                    sb.AppendLine($"file_processed_success_total {Interlocked.Read(ref _processedSuccessTotal)}");
+                    sb.AppendLine("# HELP file_processed_failure_total Number of failed file posts");
+                    sb.AppendLine("# TYPE file_processed_failure_total counter");
+                    sb.AppendLine($"file_processed_failure_total {Interlocked.Read(ref _processedFailureTotal)}");
+                    sb.AppendLine("# HELP file_enqueued_total Number of enqueued files seen at startup");
+                    sb.AppendLine("# TYPE file_enqueued_total counter");
+                    sb.AppendLine($"file_enqueued_total {Interlocked.Read(ref _enqueuedTotal)}");
+                    // Circuit breaker metrics: number open
+                    var openCount = _circuitStates.Values.Count(c => c.IsOpen);
+                    sb.AppendLine("# HELP circuit_open_total Number of endpoints with open circuit breakers");
+                    sb.AppendLine("# TYPE circuit_open_total gauge");
+                    sb.AppendLine($"circuit_open_total {openCount}");
+                    responseText = sb.ToString();
+                    contentType = "text/plain";
+                    break;
+
                 default:
                     response.StatusCode = 404;
                     var error = new ErrorResponse
                     {
                         Error = "Not found",
-                        AvailableEndpoints = new[] { "/status", "/health", "/events", "/watchers", "/test" }
+                        AvailableEndpoints = ["/status", "/health", "/events", "/watchers", "/test", "/metrics"]
                     };
                     responseText = JsonSerializer.Serialize(error, typeof(ErrorResponse), MyJsonContext.Default);
                     break;
@@ -181,7 +217,10 @@ public class DiagnosticsService : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing diagnostics request for path: {Path}", context.Request.Url?.AbsolutePath ?? "unknown");
+            if (_logger.IsEnabled(LogLevel.Error))
+            {
+                _logger.LogError(ex, "Error processing diagnostics request for path: {Path}", context.Request.Url?.AbsolutePath ?? "unknown");
+            }
             try
             {
                 var errorResponse = "{ \"error\": \"Internal server error\", \"message\": \"" + ex.Message.Replace("\"", "\\\"") + "\" }";
@@ -223,11 +262,41 @@ public class DiagnosticsService : IDisposable
 
     public IReadOnlyCollection<string> GetActiveWatchers() => _activeWatchers.Keys.ToList().AsReadOnly();
 
+    public void IncrementEnqueued() => Interlocked.Increment(ref _enqueuedTotal);
+
     public void RecordFileEvent(string path, bool postedSuccess, int? statusCode)
     {
-        _events.Enqueue(new FileEventRecord(path, DateTimeOffset.UtcNow, postedSuccess, statusCode));
+        _events.Enqueue(new FileEventRecord(path, DateTimeOffset.Now, postedSuccess, statusCode));
         // keep the queue bounded to e.g. 1000 entries
         while (_events.Count > 1000 && _events.TryDequeue(out _)) { }
+
+        // Update counters (also available via System.Diagnostics.Metrics for OTEL)
+        if (postedSuccess)
+        {
+            _processedSuccessCounter.Add(1);
+            Interlocked.Increment(ref _processedSuccessTotal);
+        }
+        else
+        {
+            _processedFailureCounter.Add(1);
+            Interlocked.Increment(ref _processedFailureTotal);
+        }
+    }
+
+    public void UpdateCircuitState(string endpoint, int failures, DateTimeOffset? openUntil)
+    {
+        var info = new CircuitStateInfo
+        {
+            Endpoint = endpoint ?? string.Empty,
+            Failures = failures,
+            OpenUntil = openUntil
+        };
+        _circuitStates[endpoint ?? string.Empty] = info;
+    }
+
+    public IReadOnlyDictionary<string, CircuitStateInfo> GetCircuitStatesSnapshot()
+    {
+        return new Dictionary<string, CircuitStateInfo>(_circuitStates);
     }
 
     public IReadOnlyCollection<FileEventRecord> GetRecentEvents(int limit = 100)
@@ -241,7 +310,7 @@ public class DiagnosticsService : IDisposable
             ActiveWatchers = GetActiveWatchers(),
             RestartAttempts = GetRestartAttemptsSnapshot(),
             RecentEvents = GetRecentEvents(200),
-            Timestamp = DateTimeOffset.UtcNow,
+            Timestamp = DateTimeOffset.Now,
             EventCount = _events.Count
         };
     }

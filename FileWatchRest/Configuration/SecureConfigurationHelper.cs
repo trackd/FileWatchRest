@@ -1,7 +1,4 @@
-﻿using System.Security.Cryptography;
-using System.Text;
-
-namespace FileWatchRest.Configuration;
+﻿namespace FileWatchRest.Configuration;
 
 /// <summary>
 /// Handles secure encryption and decryption of sensitive configuration data
