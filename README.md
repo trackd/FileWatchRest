@@ -33,7 +33,7 @@ FileWatchRest/
 │   ├── FileNotification.cs
 │   └── JsonContexts.cs
 ├── Logging/          # Logging implementations
-│   └── CsvLogger.cs
+│   └── SimpleFileLoggerProvider.cs (custom file + CSV logger)
 └── Program.cs        # Application entry point
 ```
 
@@ -42,7 +42,7 @@ Configuration
 
 The service uses a single JSON configuration file for all settings:
 
-**Configuration File**: `C:\ProgramData\FileWatchRest\FileWatchRest.json`  
+**Configuration File**: `$env:ProgramData\FileWatchRest\FileWatchRest.json`  
 
 This file is created automatically with defaults and can be edited while the service is running. Changes are detected automatically and applied without restarting the service.  
 
@@ -75,11 +75,18 @@ Example configuration:
   "ChannelCapacity": 1000,
   "MaxParallelSends": 4,
   "FileWatcherInternalBufferSize": 65536,
-  "WaitForFileReadyMilliseconds": 0
+  "WaitForFileReadyMilliseconds": 0,
+  "Logging": {
+    "LogType": "Csv",
+    "FilePathPattern": "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}",
+    "LogLevel": "Information",
+    "RetainedFileCountLimit": 14
+  }
 }
 ```
 
-### Configuration Options
+Configuration Options  
+---------------------  
 
 **Core File Watching Settings:**  
 
@@ -115,7 +122,7 @@ Security Features
 - Configuration files are safe to store in version control (tokens are encrypted)
 - No master password or key management required - Windows handles the encryption keys
 
-**Migration Support**: Existing plain text tokens are automatically detected and encrypted on the next configuration save without requiring user intervention.
+**Migration Support**: Existing plain text tokens are automatically detected and encrypted on the next configuration save without requiring user intervention.  
 
 Development and Testing  
 -----------------------  
@@ -151,14 +158,15 @@ Installation on Target Machine
 pwsh -NoProfile -ExecutionPolicy Bypass .\install_on_target.ps1  
 ```
 
-This installs files to `C:\Program Files\FileWatchRest`, creates and starts the Windows service, and sets up the configuration directory under `C:\ProgramData\FileWatchRest`.  
+This installs files to `$env:ProgramFiles\FileWatchRest`, creates and starts the Windows service, and sets up the configuration directory under `$env:ProgramData\FileWatchRest`.  
 
 API Payload Format  
 ------------------  
 
 The service POSTs JSON data to your configured endpoint:
 
-### Basic File Notification (PostFileContents: false)
+Basic Notification (metadata)  
+-----------------------------  
 
 ```json
 {  
@@ -170,7 +178,8 @@ The service POSTs JSON data to your configured endpoint:
 }  
 ```
 
-### Full File Notification (PostFileContents: true)
+Full Notification (with content)  
+-------------------------------  
 
 ```json
 {  
@@ -187,7 +196,8 @@ The service POSTs JSON data to your configured endpoint:
 
 The service provides a built-in HTTP server for real-time diagnostics and monitoring. The server runs on the URL specified by `DiagnosticsUrlPrefix` (default: `http://localhost:5005/`).  
 
-### Available Endpoints
+Diagnostics Endpoints  
+---------------------  
 
 | Endpoint | Description | Response Format |
 |----------|-------------|-----------------|
@@ -197,7 +207,8 @@ The service provides a built-in HTTP server for real-time diagnostics and monito
 | `GET /events` | Recent file processing events (last 500) | JSON |
 | `GET /watchers` | Currently active folder watchers | JSON |
 
-### Sample Responses
+Examples  
+--------  
 
 **GET /status**  
 
@@ -261,35 +272,60 @@ The service provides a built-in HTTP server for real-time diagnostics and monito
 3. Monitor file processing in real-time
 4. Use `/events` for troubleshooting failed file processing
 
-Logging  
--------  
+Logging
+-------
 
-- **Location**: `C:\ProgramData\FileWatchRest\logs\`
-- **Format**: Structured CSV files with columns: Timestamp (UTC ISO), Level, Category, Message, Exception
-- **Rotation**: One file per service run (`FileWatchRest_yyyyMMdd_HHmmss.csv`)
+Logging is configured from the same external configuration file used by the service (`$env:ProgramData\\FileWatchRest\\FileWatchRest.json`)
+
+You can select CSV, JSON, or both via the `Logging` / `LoggingOptions` settings in the configuration file. By default the service emits CSV logs and JSON is opt-in. The configuration now focuses on a single file name/pattern and an explicit `LogType` selector. The provider will append the correct file extension based on the `LogType` value.
+
+Default logging locations (per-run timestamped by default):
+
+- `$env:ProgramData\\FileWatchRest\\logs\\FileWatchRest_{0:yyyyMMdd_HHmmss}.csv` (structured CSV)
+- `$env:ProgramData\\FileWatchRest\\logs\\FileWatchRest_{0:yyyyMMdd_HHmmss}.ndjson` (structured JSON)
+
+Example `Logging` section (place this in the external configuration `FileWatchRest.json`):
+
+```json
+"Logging": {
+  "LogType": "Csv",
+  "FilePathPattern": "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}",
+  "LogLevel": "Information",
+  "RetainedFileCountLimit": 14
+}
+```
+
+Notes:
+
+- The service prefers configuration from `$env:ProgramData\\FileWatchRest\\FileWatchRest.json` (this is the single source of configuration). If that file does not exist the embedded defaults or `appsettings.json` fallback values are used.
+- CSV formatting is intentionally conservative and safe for downstream ingestion. If you need a different CSV schema, replace or extend `Logging/SimpleFileLoggerProvider.cs`.
+- For production deployments we recommend JSON logs for machine ingestion (ELK, Seq, Datadog). Enable `LogType: "Both"` if you want both CSV and JSON outputs.
 
 Troubleshooting  
 ---------------  
 
-### Service Won't Start
+Service Won't Start  
+-------------------  
 
 - Run the executable directly from command prompt to see console errors
 - Check Windows Event Log for startup failures
 - Verify configuration file exists and is valid JSON
 
-### Files Not Being Detected
+Files Not Being Detected  
+------------------------  
 
 - Check that folder paths in configuration exist and are accessible
 - Verify file extensions match `AllowedExtensions` if specified
-- Review CSV logs for watcher errors or restart attempts
+- Review logs (JSON/CSV) for watcher errors or restart attempts
 - **Note**: Files in folders matching the `ProcessedFolder` configuration value are automatically ignored to prevent infinite processing loops
 
-### API Calls Failing
+API Calls Failing  
+-----------------  
 
 - Verify `ApiEndpoint` is correct and accessible
 - Check `BearerToken` if API requires authentication
 - Review retry settings in `appsettings.json`
-- Check CSV logs for HTTP status codes
+- Check logs (JSON/CSV) for HTTP status codes
 
 Native AOT Deployment  
 ----------------------  
@@ -314,5 +350,5 @@ Configuration Management
 
 ---
 
-*FileWatchRest - Modern file watching service with REST API integration*
-
+FileWatchRest - Modern file watching service with REST API integration
+------------------------------------------------------------------

@@ -1,16 +1,4 @@
-﻿using FileWatchRest.Configuration;
-using FileWatchRest.Models;
-using FileWatchRest.Services;
-using FluentAssertions;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Hosting;
-using Moq;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Text.Json;
-
-namespace FileWatchRest.Tests;
+﻿namespace FileWatchRest.Tests;
 
 public class ExternalConfigurationTests
 {
@@ -36,7 +24,7 @@ public class ExternalConfigurationTests
         config.ChannelCapacity.Should().Be(1000);
         config.MaxParallelSends.Should().Be(4);
         config.FileWatcherInternalBufferSize.Should().Be(65536);
-        config.LogLevel.Should().Be("Information");
+        config.Logging.LogLevel.Should().Be("Information");
     }
 
     [Fact]
@@ -63,7 +51,7 @@ public class ExternalConfigurationTests
         config.ChannelCapacity = 2000;
         config.MaxParallelSends = 8;
         config.FileWatcherInternalBufferSize = 131072;
-        config.LogLevel = "Debug";
+        config.Logging.LogLevel = "Debug";
 
         // Assert
         config.Folders.Should().BeEquivalentTo(expectedFolders);
@@ -81,7 +69,7 @@ public class ExternalConfigurationTests
         config.ChannelCapacity.Should().Be(2000);
         config.MaxParallelSends.Should().Be(8);
         config.FileWatcherInternalBufferSize.Should().Be(131072);
-        config.LogLevel.Should().Be("Debug");
+        config.Logging.LogLevel.Should().Be("Debug");
     }
 
     [Theory]
@@ -141,7 +129,7 @@ public class ExternalConfigurationTests
             ChannelCapacity = 2000,
             MaxParallelSends = 6,
             FileWatcherInternalBufferSize = 131072,
-            LogLevel = "Debug"
+            Logging = new LoggingOptions { LogLevel = "Debug" }
         };
 
         // Act
@@ -165,7 +153,7 @@ public class ExternalConfigurationTests
         deserialized.ChannelCapacity.Should().Be(original.ChannelCapacity);
         deserialized.MaxParallelSends.Should().Be(original.MaxParallelSends);
         deserialized.FileWatcherInternalBufferSize.Should().Be(original.FileWatcherInternalBufferSize);
-        deserialized.LogLevel.Should().Be(original.LogLevel);
+        deserialized.Logging.LogLevel.Should().Be(original.Logging.LogLevel);
     }
 }
 
@@ -286,7 +274,7 @@ public class DiagnosticsServiceTests : IDisposable
     {
         // Arrange
         var testPath = @"C:\temp\test.txt";
-        var beforeRecording = DateTime.UtcNow;
+        var beforeRecording = DateTime.Now;
 
         // Act
         _diagnosticsService.RecordFileEvent(testPath, true, 200);
@@ -387,7 +375,7 @@ public class ConfigurationServiceIntegrationTests : IDisposable
         config.Should().NotBeNull();
         // Don't assert specific values since the service might load from existing config
         config.ProcessedFolder.Should().NotBeNullOrEmpty();
-        config.LogLevel.Should().NotBeNullOrEmpty();
+        config.Logging.LogLevel.Should().NotBeNullOrEmpty();
     }
 
     [Fact]

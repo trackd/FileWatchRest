@@ -34,10 +34,55 @@ public class ExternalConfiguration
     public int FileWatcherInternalBufferSize { get; set; } = 64 * 1024;
     public int WaitForFileReadyMilliseconds { get; set; } = 0;
 
-    // Logging configuration
     /// <summary>
-    /// Logging level for the application. Valid values: Trace, Debug, Information, Warning, Error, Critical, None
-    /// Default: Information
+    /// Maximum number of bytes to include when reading file contents for posting.
+    /// Files larger than this will be sent without their content to avoid large memory allocations.
+    /// Set to 0 to disable content posting regardless of PostFileContents.
     /// </summary>
+    public long MaxContentBytes { get; set; } = 5 * 1024 * 1024; // 5 MB default
+
+    /// <summary>
+    /// Threshold in bytes above which the service will stream the file content instead of including it inline in JSON.
+    /// Set to 0 to disable streaming and always send as JSON when PostFileContents is enabled.
+    /// </summary>
+    public long StreamingThresholdBytes { get; set; } = 256 * 1024; // 256 KB default
+
+    // Circuit breaker settings (optional)
+    public bool EnableCircuitBreaker { get; set; } = false;
+    public int CircuitBreakerFailureThreshold { get; set; } = 5; // failures before opening
+    public int CircuitBreakerOpenDurationMilliseconds { get; set; } = 30_000; // 30s open by default
+
+    // Logging configuration (provider-agnostic)
+    public LoggingOptions Logging { get; set; } = new LoggingOptions();
+}
+
+public class LoggingOptions
+{
+    /// <summary>
+    /// New unified LogType setting; defaults to CSV output.
+    /// </summary>
+    public LogType LogType { get; set; } = LogType.Csv;
+
+    /// <summary>
+    /// Single file name/pattern used for both CSV/JSON outputs; provider will append extension when necessary.
+    /// </summary>
+    public string FilePathPattern { get; set; } = "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}";
+
+    // Legacy properties retained for backward compatibility with existing configuration files
+    public bool UseJsonFile { get; set; } = false; // JSON opt-in
+    public string JsonFilePath { get; set; } = "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}.json";
+    public bool UseCsvFile { get; set; } = true;
+    public string CsvFilePath { get; set; } = "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}.csv";
+
+    // Canonical log level for the logging subsystem. Use string to preserve JSON readability and avoid coupling to Microsoft types in the configuration model.
     public string LogLevel { get; set; } = "Information";
+
+    public int RetainedFileCountLimit { get; set; } = 14;
+}
+
+public enum LogType
+{
+    Csv,
+    Json,
+    Both
 }

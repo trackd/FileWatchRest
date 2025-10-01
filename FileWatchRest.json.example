@@ -25,5 +25,10 @@
   "MaxParallelSends": 4,
   "FileWatcherInternalBufferSize": 65536,
   "WaitForFileReadyMilliseconds": 0,
-  "LogLevel": "Information"
+  "Logging": {
+    "LogType": "Csv",
+    "FilePathPattern": "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}",
+    "LogLevel": "Information",
+    "RetainedFileCountLimit": 14
+  }
 }
