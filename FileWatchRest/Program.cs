@@ -90,7 +90,7 @@ try
     // Ensure CSV header if CSV sink will be used
     if (loggingOptions.LogType == FileWatchRest.Configuration.LogType.Csv || loggingOptions.LogType == FileWatchRest.Configuration.LogType.Both)
     {
-        try { if (!File.Exists(csvLogFile)) File.WriteAllText(csvLogFile, "Timestamp,Level,Message,Category,Exception,Properties\n"); } catch { }
+        try { if (!File.Exists(csvLogFile)) File.WriteAllText(csvLogFile, "Timestamp,Level,Message,Category,Exception,StatusCode\n"); } catch { }
     }
 
     // Build simple file logger options (AOT-safe): map unified options
