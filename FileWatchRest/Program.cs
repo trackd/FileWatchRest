@@ -35,8 +35,8 @@ if (loggingOptions is null)
         if (loggingSection.Exists())
         {
             // Read new unified settings first
-            var logTypeRaw = loggingSection["LogType"]; var logType = FileWatchRest.Configuration.LogType.Csv;
-            if (!string.IsNullOrEmpty(logTypeRaw) && Enum.TryParse<FileWatchRest.Configuration.LogType>(logTypeRaw, true, out var lt)) logType = lt;
+            var logTypeRaw = loggingSection["LogType"]; var logType = LogType.Csv;
+            if (!string.IsNullOrEmpty(logTypeRaw) && Enum.TryParse<LogType>(logTypeRaw, true, out var lt)) logType = lt;
 
             var filePatternRaw = loggingSection["FilePathPattern"]; var filePattern = string.IsNullOrEmpty(filePatternRaw) ? null : filePatternRaw;
 
@@ -88,7 +88,7 @@ try
     var jsonLogFile = JsonLogFilePath(baseResolved);
 
     // Ensure CSV header if CSV sink will be used
-    if (loggingOptions.LogType == FileWatchRest.Configuration.LogType.Csv || loggingOptions.LogType == FileWatchRest.Configuration.LogType.Both)
+    if (loggingOptions.LogType == LogType.Csv || loggingOptions.LogType == LogType.Both)
     {
         try { if (!File.Exists(csvLogFile)) File.WriteAllText(csvLogFile, "Timestamp,Level,Message,Category,Exception,StatusCode\n"); } catch { }
     }

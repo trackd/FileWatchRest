@@ -53,7 +53,7 @@ public class WorkerStreamingTests
 
             result.Should().BeTrue();
             testResilience.LastRequest.Should().NotBeNull();
-            testResilience.LastRequest!.Content.Should().BeOfType<MultipartFormDataContent>();
+            testResilience.LastRequestContentType.Should().Be(typeof(MultipartFormDataContent));
         }
         finally
         {
@@ -61,16 +61,22 @@ public class WorkerStreamingTests
         }
     }
 
-    private sealed class CapturingResilienceService : IResilienceService
+        private sealed class CapturingResilienceService : IResilienceService
     {
-        public HttpRequestMessage? LastRequest { get; private set; }
+    public HttpRequestMessage? LastRequest { get; private set; }
+    public Type? LastRequestContentType { get; private set; }
 
-        public Task<ResilienceResult> SendWithRetriesAsync(Func<HttpRequestMessage> requestFactory, HttpClient client, string endpointKey, ExternalConfiguration config, CancellationToken ct)
+        public async Task<ResilienceResult> SendWithRetriesAsync(Func<CancellationToken, Task<HttpRequestMessage>> requestFactory, HttpClient client, string endpointKey, ExternalConfiguration config, CancellationToken ct)
         {
-            using var req = requestFactory();
-            LastRequest = req; // capture before disposing for assertions
-            // Note: dispose request content stream by disposing req
-            return Task.FromResult(new ResilienceResult(true, 1, 200, null, 0, false));
+            var req = await requestFactory(ct).ConfigureAwait(false);
+            // Capture a shallow copy of the request metadata for assertions; do not hold onto the request which may own streams.
+            LastRequestContentType = req.Content?.GetType();
+            LastRequest = new HttpRequestMessage(req.Method, req.RequestUri)
+            {
+                Version = req.Version
+            };
+            foreach (var h in req.Headers) LastRequest.Headers.TryAddWithoutValidation(h.Key, h.Value);
+            return new ResilienceResult(true, 1, 200, null, 0, false);
         }
     }
 

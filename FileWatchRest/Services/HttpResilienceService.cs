@@ -1,6 +1,6 @@
 ﻿namespace FileWatchRest.Services;
 
-internal class HttpResilienceService : IResilienceService
+internal class HttpResilienceService : IResilienceService, IResilienceMetricsProvider
 {
     private readonly ILogger<HttpResilienceService> _logger;
     private static readonly Action<ILogger<HttpResilienceService>, string, Exception?> _circuitOpenWarning =
@@ -18,6 +18,14 @@ internal class HttpResilienceService : IResilienceService
     private static readonly Action<ILogger<HttpResilienceService>, string, int, int, Exception?> _exceptionPostingWillRetry =
         LoggerMessage.Define<string, int, int>(LogLevel.Debug, new EventId(7, "ExceptionPostingWillRetry"), "Exception posting request to {Endpoint} on attempt {Attempt}/{Attempts}; will retry");
     private readonly DiagnosticsService _diagnostics;
+    private readonly Meter _meter = new("FileWatchRest.HttpResilience", "1.0.0");
+    private readonly Counter<long> _attemptsCounter;
+    private readonly Counter<long> _failureCounter;
+    private readonly Counter<long> _shortCircuitCounter;
+    // Totals for diagnostics snapshot (counters don't expose totals)
+    private long _attemptsTotal;
+    private long _failuresTotal;
+    private long _shortCircuitTotal;
     private sealed class CircuitState { public int Failures; public DateTimeOffset? OpenUntil; public readonly object Lock = new(); }
     private readonly ConcurrentDictionary<string, CircuitState> _states = new(StringComparer.OrdinalIgnoreCase);
 
@@ -25,19 +33,35 @@ internal class HttpResilienceService : IResilienceService
     {
         _logger = logger;
         _diagnostics = diagnostics;
+        _attemptsCounter = _meter.CreateCounter<long>("http_attempts_total");
+        _failureCounter = _meter.CreateCounter<long>("http_failures_total");
+        _shortCircuitCounter = _meter.CreateCounter<long>("http_short_circuits_total");
+
+        // Register with diagnostics so totals can be exposed
+        _diagnostics.RegisterResilienceMetricsProvider(this);
     }
 
-    public async Task<ResilienceResult> SendWithRetriesAsync(Func<HttpRequestMessage> requestFactory, HttpClient client, string endpointKey, ExternalConfiguration config, CancellationToken ct)
+    public ResilienceMetrics GetMetricsSnapshot()
+    {
+        return new ResilienceMetrics(
+            Interlocked.Read(ref _attemptsTotal),
+            Interlocked.Read(ref _failuresTotal),
+            Interlocked.Read(ref _shortCircuitTotal));
+    }
+
+    public async Task<ResilienceResult> SendWithRetriesAsync(Func<CancellationToken, Task<HttpRequestMessage>> requestFactory, HttpClient client, string endpointKey, ExternalConfiguration config, CancellationToken ct)
     {
         var state = _states.GetOrAdd(endpointKey ?? string.Empty, _ => new CircuitState());
 
         // Check circuit open state
         lock (state.Lock)
         {
-            if (state.OpenUntil.HasValue && state.OpenUntil.Value > DateTimeOffset.UtcNow)
+                if (state.OpenUntil.HasValue && state.OpenUntil.Value > DateTimeOffset.UtcNow)
             {
                 _circuitOpenWarning(_logger, endpointKey ?? string.Empty, null);
                 _diagnostics.UpdateCircuitState(endpointKey ?? string.Empty, state.Failures, state.OpenUntil);
+                    _shortCircuitCounter.Add(1);
+                    Interlocked.Increment(ref _shortCircuitTotal);
                 return new ResilienceResult(false, 0, null, null, 0, true);
             }
         }
@@ -55,13 +79,15 @@ internal class HttpResilienceService : IResilienceService
             attempts = attempt;
             try
             {
-                using var req = requestFactory();
+                    _attemptsCounter.Add(1);
+                    Interlocked.Increment(ref _attemptsTotal);
+                using var req = await requestFactory(ct).ConfigureAwait(false);
                 if (req is null) throw new InvalidOperationException("requestFactory produced null HttpRequestMessage");
 
                 _postingTrace(_logger, endpointKey ?? string.Empty, attempt, attemptsTotal, null);
 
                 var attemptSw = System.Diagnostics.Stopwatch.StartNew();
-                lastResponse = await client.SendAsync(req, ct);
+                lastResponse = await client.SendAsync(req, ct).ConfigureAwait(false);
                 attemptSw.Stop();
 
                 if (lastResponse.IsSuccessStatusCode)
@@ -103,6 +129,8 @@ internal class HttpResilienceService : IResilienceService
                         _diagnostics.UpdateCircuitState(endpointKey ?? string.Empty, state.Failures, state.OpenUntil);
                     }
                     _diagnostics.RecordFileEvent("(internal)", false, status);
+                        _failureCounter.Add(1);
+                        Interlocked.Increment(ref _failuresTotal);
                     sw.Stop();
                     return new ResilienceResult(false, attempts, status, null, sw.ElapsedMilliseconds, false);
                 }
