@@ -17,3 +17,4 @@ global using FileWatchRest.Logging;
 global using FileWatchRest.Services;
 global using Microsoft.Extensions.Options;
 global using System.Runtime.CompilerServices;
+global using System.Diagnostics.CodeAnalysis;

@@ -68,66 +68,7 @@ public sealed partial class SimpleFileLoggerProvider : ILoggerProvider
                 // If the file exists but its header does not match the expected minimal header, replace the header using a temp file and replace.
                 if (File.Exists(csvPath) && new FileInfo(csvPath).Length > 0)
                 {
-                    try
-                    {
-                        // Open original file and find the position immediately after the first newline
-                        using var inputFs = new FileStream(csvPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                        long copyStart = -1;
-                        const int BufSize = 8192;
-                        var buf = new byte[BufSize];
-                        long total = 0;
-                        int read;
-                        while ((read = inputFs.Read(buf, 0, BufSize)) > 0)
-                        {
-                            for (int i = 0; i < read; i++)
-                            {
-                                if (buf[i] == (byte)'\n')
-                                {
-                                    copyStart = total + i + 1; // position after newline
-                                    break;
-                                }
-                            }
-                            if (copyStart != -1) break;
-                            total += read;
-                        }
-
-                        if (copyStart == -1) // no newline found - original file is a single line (likely just the old header)
-                            copyStart = inputFs.Length;
-
-                        var tempPath = Path.Combine(dir, $"{Guid.NewGuid():N}.tmp");
-
-                        // Create temp file and write expected header then copy remaining bytes from original (excluding original header)
-                        using (var outFs = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                        using (var writer = new StreamWriter(outFs, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
-                        {
-                            writer.WriteLine(expectedHeader);
-                            writer.Flush();
-
-                            // Copy remainder from original starting at the byte position after the first newline
-                            inputFs.Position = copyStart;
-                            inputFs.CopyTo(outFs);
-                        }
-
-                        try
-                        {
-                            File.Replace(tempPath, csvPath, null);
-                        }
-                        catch
-                        {
-                            // If Replace fails, fallback to delete+move (best-effort)
-                            try { File.Delete(csvPath); } catch { }
-                            try { File.Move(tempPath, csvPath); } catch { }
-                        }
-                        finally
-                        {
-                            // Cleanup any stray temp file
-                            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-                        }
-                    }
-                    catch
-                    {
-                        // If anything goes wrong, fall back to leaving the file untouched and continue.
-                    }
+                    EnsureCsvHeaderMatches(csvPath, expectedHeader);
                 }
 
                 _csvWriter = File.AppendText(csvPath);
@@ -141,6 +82,72 @@ public sealed partial class SimpleFileLoggerProvider : ILoggerProvider
         catch
         {
             // Don't let logging initialization crash the app
+        }
+    }
+
+    // Extracted helper to ensure the CSV file contains at least the expected minimal header.
+    private void EnsureCsvHeaderMatches(string csvPath, string expectedHeader)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(csvPath) ?? ".";
+            // Open original file and find the position immediately after the first newline
+            using var inputFs = new FileStream(csvPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            long copyStart = -1;
+            const int BufSize = 8192;
+            var buf = new byte[BufSize];
+            long total = 0;
+            int read;
+            while ((read = inputFs.Read(buf, 0, BufSize)) > 0)
+            {
+                for (int i = 0; i < read; i++)
+                {
+                    if (buf[i] == (byte)'\n')
+                    {
+                        copyStart = total + i + 1; // position after newline
+                        break;
+                    }
+                }
+                if (copyStart != -1) break;
+                total += read;
+            }
+
+            if (copyStart == -1) // no newline found - original file is a single line (likely just the old header)
+                copyStart = inputFs.Length;
+
+            var tempPath = Path.Combine(dir, $"{Guid.NewGuid():N}.tmp");
+
+            // Create temp file and write expected header then copy remaining bytes from original (excluding original header)
+            using (var outFs = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            using (var writer = new StreamWriter(outFs, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+            {
+                writer.WriteLine(expectedHeader);
+                writer.Flush();
+
+                // Copy remainder from original starting at the byte position after the first newline
+                inputFs.Position = copyStart;
+                inputFs.CopyTo(outFs);
+            }
+
+            try
+            {
+                File.Replace(tempPath, csvPath, null);
+            }
+            catch
+            {
+                // If Replace fails, fallback to delete+move (best-effort)
+                try { File.Delete(csvPath); } catch { }
+                try { File.Move(tempPath, csvPath); } catch { }
+            }
+            finally
+            {
+                // Cleanup any stray temp file
+                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            }
+        }
+        catch
+        {
+            // If anything goes wrong, fall back to leaving the file untouched and continue.
         }
     }
 
