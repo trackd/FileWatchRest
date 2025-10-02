@@ -23,3 +23,9 @@ roslynator_compiler_diagnostic_fixes.enabled = true #|false
 [*.cs]
 # Reduce CA1873 severity to warning to avoid failing builds for logging argument evaluations
 dotnet_diagnostic.CA1873.severity = warning
+
+# Treat the custom analyzer reporting file-level using directives as a warning.
+dotnet_diagnostic.FW0001.severity = warning
+
+# Optional: ensure analyzers run with formatting fixes available to dotnet-format
+dotnet_analyzer_diagnostic.category-Performance.severity = warning

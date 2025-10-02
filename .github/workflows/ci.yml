@@ -1,0 +1,145 @@
+﻿name: CI
+
+on:
+  push:
+    branches: [ main, "feature/**" ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  check-global-usings:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install dotnet-format
+        run: dotnet tool install -g dotnet-format || true
+
+      - name: Run dotnet-format to detect analyzer fixes
+        id: check_usings
+        shell: bash
+        continue-on-error: true
+        run: |
+          export PATH="$HOME/.dotnet/tools:$PATH"
+          dotnet format --folder --fix-analyzers --verify-no-changes 2>&1 | tee violations.txt || true
+          echo "::set-output name=violations::$(cat violations.txt)"
+
+      - name: Post PR comment when violations found
+        if: steps.check_usings.outputs.violations != ''
+        uses: actions/github-script@v6
+        with:
+          github-token:
+            ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const violations = process.env['VIOLATIONS'] || '';
+            const pr = context.payload.pull_request.number;
+            const marker = '<!-- global-using-check -->';
+            const body = `### Global-Using Violations Detected\n\n${violations}\n\n${marker}`;
+
+            // Look for existing bot comment on this PR
+            const comments = await github.rest.issues.listComments({ owner: context.repo.owner, repo: context.repo.repo, issue_number: pr });
+            const existing = comments.data.find(c => c.body && c.body.includes(marker) && c.user && c.user.type === 'Bot');
+            if (existing) {
+              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: pr, body });
+            }
+        env:
+          VIOLATIONS: ${{ steps.check_usings.outputs.violations }}
+
+      - name: Apply analyzer fixes and create-or-update migration PR
+        if: steps.check_usings.outputs.violations != ''
+        run: |
+          set -e
+          export PATH="$HOME/.dotnet/tools:$PATH"
+
+          BRANCH_NAME="migration/global-usings"
+
+          # Ensure we are on a writable checkout and have full history
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # If the migration branch exists on origin, base on it; otherwise create from current HEAD
+          if git ls-remote --exit-code --heads origin ${BRANCH_NAME}; then
+            git fetch origin ${BRANCH_NAME}:${BRANCH_NAME}
+            git checkout ${BRANCH_NAME}
+            git reset --hard origin/${BRANCH_NAME}
+          else
+            git checkout -b ${BRANCH_NAME}
+          fi
+
+          # Apply analyzer fixes in-place
+          dotnet format --folder --fix-analyzers
+
+          # If there are any changes, commit and push to the migration branch (force-update so we can upsert)
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore(ci): apply analyzer fixes for global using migration"
+            git push origin HEAD:${BRANCH_NAME} --force
+          else
+            echo "No analyzer-applied changes; nothing to push."
+          fi
+
+      - name: Create-or-update migration PR
+        if: steps.check_usings.outputs.violations != ''
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const head = `${owner}:migration/global-usings`;
+            const base = 'main';
+            const title = 'Migrate file-level using directives to GlobalUsings.cs (automated)';
+            const body = 'This PR was created automatically by CI to apply analyzer fixes (global using migration). It is safe to review and merge.';
+
+            const prs = await github.rest.pulls.list({ owner, repo, head: `${owner}:migration/global-usings`, state: 'open' });
+            if (prs.data && prs.data.length > 0) {
+              const pr = prs.data[0];
+              await github.rest.pulls.update({ owner, repo, pull_number: pr.number, title, body });
+              console.log('Updated existing PR: ' + pr.html_url);
+            } else {
+              const { data: newPr } = await github.rest.pulls.create({ owner, repo, title, head: 'migration/global-usings', base });
+              console.log('Created PR: ' + newPr.html_url);
+            }
+  build-and-test:
+    runs-on: ubuntu-latest
+    needs: [check-global-usings]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore FileWatchRest.sln
+
+      - name: Install dotnet-format tool
+        run: dotnet tool install -g dotnet-format || true
+
+      - name: Build
+        run: dotnet build FileWatchRest.sln --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test FileWatchRest.sln --configuration Release --no-build --verbosity normal
+
+      - name: Run dotnet-format (verify)
+        run: |
+          export PATH="$HOME/.dotnet/tools:$PATH"
+          dotnet-format --verify-no-changes --folder || true
+
+      - name: Verify global-using enforcement
+        run: dotnet build FileWatchRest.sln --configuration Release --no-restore
