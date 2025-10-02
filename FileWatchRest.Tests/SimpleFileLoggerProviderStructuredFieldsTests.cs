@@ -31,7 +31,7 @@ public class SimpleFileLoggerProviderStructuredFieldsTests
 
             provider.Dispose();
 
-            var ndjsonPath = basePath + ".ndjson";
+            var ndjsonPath = basePath + ".json";
             var csvPath = basePath + ".csv";
 
             File.Exists(ndjsonPath).Should().BeTrue();

@@ -42,10 +42,10 @@ public sealed partial class SimpleFileLoggerProvider : ILoggerProvider
             // JSON writer
             if (Options.LogType == LogType.Json || Options.LogType == LogType.Both)
             {
-                var jsonPath = EnsureFileName(basePath, ".ndjson");
+                var jsonPath = EnsureFileName(basePath, ".json");
                 var dir = Path.GetDirectoryName(jsonPath) ?? ".";
                 _ = Directory.CreateDirectory(dir);
-                try { PurgeOldLogFilesForPattern(dir, Options.FilePathPattern + ".ndjson", Options.RetainedFileCountLimit); } catch { }
+                try { PurgeOldLogFilesForPattern(dir, Options.FilePathPattern + ".json", Options.RetainedFileCountLimit); } catch { }
                 _jsonWriter = File.AppendText(jsonPath);
                 _jsonWriter.AutoFlush = true;
             }
