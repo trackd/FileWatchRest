@@ -144,7 +144,7 @@ internal class HttpResilienceService : IResilienceService
             if (attempt < attemptsTotal)
             {
                 var jitter = Random.Shared.Next(0, 100);
-                var delay = (int)(baseDelayMs * Math.Pow(2, attempt - 1)) + jitter;
+                var delay = (baseDelayMs << (attempt - 1)) + jitter;
                 try { await Task.Delay(delay, ct); } catch (OperationCanceledException) when (ct.IsCancellationRequested) { sw.Stop(); return new ResilienceResult(false, attempts, null, lastException, sw.ElapsedMilliseconds, false); }
             }
         }
