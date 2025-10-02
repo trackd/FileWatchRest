@@ -409,7 +409,7 @@ public partial class Worker : BackgroundService
         using var fileClient = _httpClientFactory.CreateClient("fileApi");
 
         // Prepare a factory to create a fresh HttpRequestMessage for each attempt so streaming content is created per attempt.
-        Func<CancellationToken, Task<HttpRequestMessage>> requestFactory = async ct =>
+    Func<CancellationToken, Task<HttpRequestMessage>> requestFactory = ct =>
         {
             // Decide sending strategy: use streaming upload when appropriate
             if (ShouldUseStreamingUpload(notification))
@@ -445,7 +445,7 @@ public partial class Worker : BackgroundService
                 var requestId = Guid.NewGuid().ToString("N");
                 if (!reqMsg.Headers.Contains("X-Request-Id")) reqMsg.Headers.Add("X-Request-Id", requestId);
                 _requestCorrelationDebug(_logger, requestId, notification.Path, null);
-                return reqMsg;
+                return Task.FromResult(reqMsg);
             }
             else
             {
@@ -465,7 +465,7 @@ public partial class Worker : BackgroundService
                 var requestId = Guid.NewGuid().ToString("N");
                 if (!reqMsg.Headers.Contains("X-Request-Id")) reqMsg.Headers.Add("X-Request-Id", requestId);
                 _requestCorrelationDebug(_logger, requestId, notification.Path, null);
-                return reqMsg;
+                return Task.FromResult(reqMsg);
             }
         };
 
