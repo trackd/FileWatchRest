@@ -21,9 +21,20 @@
   "WatcherMaxRestartAttempts": 3,
   "WatcherRestartDelayMilliseconds": 1000,
   "DiagnosticsUrlPrefix": "http://localhost:5005/",
+  "DiagnosticsBearerToken": "your-diagnostics-bearer-token-or-omit-to-auto-generate",
   "ChannelCapacity": 1000,
   "MaxParallelSends": 4,
   "FileWatcherInternalBufferSize": 65536,
   "WaitForFileReadyMilliseconds": 0,
-  "LogLevel": "Information"
+  "MaxContentBytes": 5242880,
+  "StreamingThresholdBytes": 262144,
+  "EnableCircuitBreaker": false,
+  "CircuitBreakerFailureThreshold": 5,
+  "CircuitBreakerOpenDurationMilliseconds": 30000,
+  "Logging": {
+    "LogType": "Csv",
+    "FilePathPattern": "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}",
+    "LogLevel": "Information",
+    "RetainedFileCountLimit": 14
+  }
 }

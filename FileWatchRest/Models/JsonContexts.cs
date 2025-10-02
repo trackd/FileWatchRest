@@ -1,8 +1,4 @@
-﻿using System.Text.Json.Serialization;
-using FileWatchRest.Configuration;
-using FileWatchRest.Services;
-
-namespace FileWatchRest.Models;
+﻿namespace FileWatchRest.Models;
 
 // Diagnostic response models
 public class DiagnosticStatus
@@ -12,6 +8,7 @@ public class DiagnosticStatus
     public IReadOnlyCollection<FileEventRecord> RecentEvents { get; set; } = [];
     public DateTimeOffset Timestamp { get; set; }
     public int EventCount { get; set; }
+    public IReadOnlyDictionary<string, CircuitStateInfo> CircuitStates { get; set; } = new Dictionary<string, CircuitStateInfo>();
 }
 
 public class HealthStatus
@@ -26,9 +23,14 @@ public class ErrorResponse
     public string[] AvailableEndpoints { get; set; } = [];
 }
 
-[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSourceGenerationOptions(WriteIndented = false)]
+[JsonSerializable(typeof(UploadMetadata))]
 [JsonSerializable(typeof(FileNotification))]
 [JsonSerializable(typeof(ExternalConfiguration))]
+[JsonSerializable(typeof(LoggingOptions))]
+[JsonSerializable(typeof(LogWriteEntry))]
+[JsonSerializable(typeof(CircuitStateInfo))]
+[JsonSerializable(typeof(Dictionary<string, CircuitStateInfo>))]
 [JsonSerializable(typeof(DiagnosticStatus))]
 [JsonSerializable(typeof(HealthStatus))]
 [JsonSerializable(typeof(ErrorResponse))]

@@ -1,16 +1,4 @@
-﻿using FileWatchRest.Configuration;
-using FileWatchRest.Models;
-using FileWatchRest.Services;
-using FluentAssertions;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Hosting;
-using Moq;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Text.Json;
-
-namespace FileWatchRest.Tests;
+﻿namespace FileWatchRest.Tests;
 
 public class ExternalConfigurationTests
 {
@@ -36,7 +24,7 @@ public class ExternalConfigurationTests
         config.ChannelCapacity.Should().Be(1000);
         config.MaxParallelSends.Should().Be(4);
         config.FileWatcherInternalBufferSize.Should().Be(65536);
-        config.LogLevel.Should().Be("Information");
+        config.Logging.LogLevel.Should().Be("Information");
     }
 
     [Fact]
@@ -63,7 +51,7 @@ public class ExternalConfigurationTests
         config.ChannelCapacity = 2000;
         config.MaxParallelSends = 8;
         config.FileWatcherInternalBufferSize = 131072;
-        config.LogLevel = "Debug";
+        config.Logging.LogLevel = "Debug";
 
         // Assert
         config.Folders.Should().BeEquivalentTo(expectedFolders);
@@ -81,7 +69,7 @@ public class ExternalConfigurationTests
         config.ChannelCapacity.Should().Be(2000);
         config.MaxParallelSends.Should().Be(8);
         config.FileWatcherInternalBufferSize.Should().Be(131072);
-        config.LogLevel.Should().Be("Debug");
+        config.Logging.LogLevel.Should().Be("Debug");
     }
 
     [Theory]
@@ -126,13 +114,13 @@ public class ExternalConfigurationTests
         // Arrange
         var original = new ExternalConfiguration
         {
-            Folders = [@"C:\temp\watch1", @"C:\temp\watch2"],
+            Folders = new[] { @"C:\temp\watch1", @"C:\temp\watch2" },
             ApiEndpoint = "https://api.example.com/files",
             BearerToken = "test-token-123",
             PostFileContents = true,
             MoveProcessedFiles = true,
             ProcessedFolder = "completed",
-            AllowedExtensions = [".txt", ".json", ".xml"],
+            AllowedExtensions = new[] { ".txt", ".json", ".xml" },
             IncludeSubdirectories = false,
             DebounceMilliseconds = 1500,
             Retries = 5,
@@ -141,7 +129,7 @@ public class ExternalConfigurationTests
             ChannelCapacity = 2000,
             MaxParallelSends = 6,
             FileWatcherInternalBufferSize = 131072,
-            LogLevel = "Debug"
+            Logging = new LoggingOptions { LogLevel = "Debug" }
         };
 
         // Act
@@ -165,7 +153,7 @@ public class ExternalConfigurationTests
         deserialized.ChannelCapacity.Should().Be(original.ChannelCapacity);
         deserialized.MaxParallelSends.Should().Be(original.MaxParallelSends);
         deserialized.FileWatcherInternalBufferSize.Should().Be(original.FileWatcherInternalBufferSize);
-        deserialized.LogLevel.Should().Be(original.LogLevel);
+        deserialized.Logging.LogLevel.Should().Be(original.Logging.LogLevel);
     }
 }
 
@@ -286,7 +274,7 @@ public class DiagnosticsServiceTests : IDisposable
     {
         // Arrange
         var testPath = @"C:\temp\test.txt";
-        var beforeRecording = DateTime.UtcNow;
+        var beforeRecording = DateTime.Now;
 
         // Act
         _diagnosticsService.RecordFileEvent(testPath, true, 200);
@@ -337,7 +325,7 @@ public class DiagnosticsServiceTests : IDisposable
         }
 
         // Assert
-        var act = () => Task.WaitAll([.. tasks], TimeSpan.FromSeconds(10));
+        var act = () => Task.WaitAll(tasks.ToArray(), TimeSpan.FromSeconds(10));
         act.Should().NotThrow();
 
         _diagnosticsService.GetActiveWatchers().Should().HaveCount(50);
@@ -387,7 +375,7 @@ public class ConfigurationServiceIntegrationTests : IDisposable
         config.Should().NotBeNull();
         // Don't assert specific values since the service might load from existing config
         config.ProcessedFolder.Should().NotBeNullOrEmpty();
-        config.LogLevel.Should().NotBeNullOrEmpty();
+        config.Logging.LogLevel.Should().NotBeNullOrEmpty();
     }
 
     [Fact]
@@ -397,7 +385,7 @@ public class ConfigurationServiceIntegrationTests : IDisposable
         _configurationService = new ConfigurationService(_mockLogger.Object, _testServiceName);
         var testConfig = new ExternalConfiguration
         {
-            Folders = [@"C:\test\save"],
+            Folders = new[] { @"C:\test\save" },
             ApiEndpoint = "https://api.test.com/save",
             DebounceMilliseconds = 3000,
             PostFileContents = true
@@ -407,7 +395,7 @@ public class ConfigurationServiceIntegrationTests : IDisposable
         await _configurationService.SaveConfigurationAsync(testConfig);
 
         // Assert - The save operation should complete without throwing
-        testConfig.Folders.Should().BeEquivalentTo([@"C:\test\save"]);
+        testConfig.Folders.Should().BeEquivalentTo(new[] { @"C:\test\save" });
         testConfig.ApiEndpoint.Should().Be("https://api.test.com/save");
         testConfig.DebounceMilliseconds.Should().Be(3000);
         testConfig.PostFileContents.Should().BeTrue();
@@ -455,12 +443,12 @@ public class ConfigurationServiceIntegrationTests : IDisposable
 public class EndToEndIntegrationTests : IDisposable
 {
     private readonly string _testDirectory;
-    private readonly List<string> _receivedPosts = [];
+    private readonly List<string> _receivedPosts = new List<string>();
     private readonly object _postsLock = new();
     private HttpListener? _mockHttpServer;
     private Task? _serverTask;
     private readonly CancellationTokenSource _serverCts = new();
-    private readonly List<string> _testServiceNames = []; // Track service names for cleanup
+    private readonly List<string> _testServiceNames = new List<string>(); // Track service names for cleanup
 
     public EndToEndIntegrationTests()
     {
@@ -477,13 +465,13 @@ public class EndToEndIntegrationTests : IDisposable
         // Create test configuration
         var config = new ExternalConfiguration
         {
-            Folders = [_testDirectory],
+            Folders = new[] { _testDirectory },
             ApiEndpoint = serverUrl,
             PostFileContents = true,
             DebounceMilliseconds = 100, // Short debounce for testing
             Retries = 1,
             RetryDelayMilliseconds = 100,
-            AllowedExtensions = [".txt"],
+            AllowedExtensions = new[] { ".txt" },
             IncludeSubdirectories = false,
             MoveProcessedFiles = false
         };
@@ -509,9 +497,11 @@ public class EndToEndIntegrationTests : IDisposable
         var diagnosticsService = new DiagnosticsService(diagnosticsLogger);
         var configurationService = new ConfigurationService(configServiceLogger, serviceName);
 
-        var worker = new Worker(workerLogger, httpClientFactory, lifetime, diagnosticsService, configurationService);
-
-        // Act - Start the worker
+        var initial = await configurationService.LoadConfigurationAsync();
+        var watcherManager = new FileWatcherManager(LoggerFactory.Create(builder => builder.AddDebug()).CreateLogger<FileWatcherManager>(), diagnosticsService);
+        var resilience = new HttpResilienceService(LoggerFactory.Create(builder => builder.AddDebug()).CreateLogger<HttpResilienceService>(), diagnosticsService);
+        var optionsMonitor = new SimpleOptionsMonitor<ExternalConfiguration>(initial);
+        var worker = new Worker(workerLogger, httpClientFactory, lifetime, diagnosticsService, configurationService, watcherManager, resilience, optionsMonitor);        // Act - Start the worker
         var workerCts = new CancellationTokenSource();
         var workerTask = worker.StartAsync(workerCts.Token);
 
@@ -561,13 +551,13 @@ public class EndToEndIntegrationTests : IDisposable
         // Create test configuration (PostFileContents = false)
         var config = new ExternalConfiguration
         {
-            Folders = [_testDirectory],
+            Folders = new[] { _testDirectory },
             ApiEndpoint = serverUrl,
             PostFileContents = false, // Metadata only
             DebounceMilliseconds = 100,
             Retries = 1,
             RetryDelayMilliseconds = 100,
-            AllowedExtensions = [".txt"],
+            AllowedExtensions = new[] { ".txt" },
             IncludeSubdirectories = false,
             MoveProcessedFiles = false
         };
@@ -593,11 +583,13 @@ public class EndToEndIntegrationTests : IDisposable
         var diagnosticsService = new DiagnosticsService(diagnosticsLogger);
         var configurationService = new ConfigurationService(configServiceLogger, serviceName);
 
-        var worker = new Worker(workerLogger, httpClientFactory, lifetime, diagnosticsService, configurationService);
-
-        // Act - Start the worker
+        var initial2 = await configurationService.LoadConfigurationAsync();
+        var watcherManager2 = new FileWatcherManager(LoggerFactory.Create(builder => builder.AddDebug()).CreateLogger<FileWatcherManager>(), diagnosticsService);
+        var resilience2 = new HttpResilienceService(LoggerFactory.Create(builder => builder.AddDebug()).CreateLogger<HttpResilienceService>(), diagnosticsService);
+        var optionsMonitor2 = new SimpleOptionsMonitor<ExternalConfiguration>(initial2);
+        var worker2 = new Worker(workerLogger, httpClientFactory, lifetime, diagnosticsService, configurationService, watcherManager2, resilience2, optionsMonitor2);        // Act - Start the worker
         var workerCts = new CancellationTokenSource();
-        var workerTask = worker.StartAsync(workerCts.Token);
+        var workerTask = worker2.StartAsync(workerCts.Token);
 
         // Give the worker time to initialize
         await Task.Delay(500);

@@ -1,0 +1,10 @@
+﻿<Project>
+  <!-- Global MSBuild enforcement for file-level using directives has been removed.
+       Policy is now enforced manually by the team; no build-time task is executed.
+  -->
+  <PropertyGroup>
+    <!-- If you re-add a NuGet-based Microsoft.CodeAnalysis.NetAnalyzers package, the SDK may warn the package
+         is older than built-in analyzers. Suppress that specific warning when intentionally pinning a package. -->
+    <_SkipUpgradeNetAnalyzersNuGetWarning>true</_SkipUpgradeNetAnalyzersNuGetWarning>
+  </PropertyGroup>
+</Project>
