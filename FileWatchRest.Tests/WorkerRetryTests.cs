@@ -29,8 +29,12 @@ public class WorkerRetryTests
             var lifetime = new TestHostApplicationLifetime();
             var diagnostics = new DiagnosticsService(_diagLogger);
             var configService = new ConfigurationService(_configLogger, "FileWatchRest_Test_CreateNotification");
+            var watcherManager = new FileWatcherManager(LoggerFactory.Create(builder => builder.AddDebug()).CreateLogger<FileWatcherManager>(), diagnostics);
+            var resilience = new HttpResilienceService(LoggerFactory.Create(builder => builder.AddDebug()).CreateLogger<HttpResilienceService>(), diagnostics);
+            var initialConfig = await configService.LoadConfigurationAsync();
+            var optionsMonitor = new SimpleOptionsMonitor<ExternalConfiguration>(initialConfig);
 
-            var worker = new Worker(_workerLogger, httpClientFactory, lifetime, diagnostics, configService);
+            var worker = new Worker(_workerLogger, httpClientFactory, lifetime, diagnostics, configService, watcherManager, resilience, optionsMonitor);
             worker.CurrentConfig = new ExternalConfiguration { PostFileContents = true, MaxContentBytes = 10 };
 
             var notification = await worker.CreateNotificationAsync(temp, CancellationToken.None);
@@ -51,8 +55,12 @@ public class WorkerRetryTests
         var lifetime = new TestHostApplicationLifetime();
         var diagnostics = new DiagnosticsService(_diagLogger);
         var configService = new ConfigurationService(_configLogger, "FileWatchRest_Test_Retry");
+        var watcherManager = new FileWatcherManager(LoggerFactory.Create(builder => builder.AddDebug()).CreateLogger<FileWatcherManager>(), diagnostics);
+        var resilience = new HttpResilienceService(LoggerFactory.Create(builder => builder.AddDebug()).CreateLogger<HttpResilienceService>(), diagnostics);
+        var initial2 = await configService.LoadConfigurationAsync();
+        var optionsMonitor2 = new SimpleOptionsMonitor<ExternalConfiguration>(initial2);
+        var worker = new Worker(_workerLogger, httpClientFactory, lifetime, diagnostics, configService, watcherManager, resilience, optionsMonitor2);
 
-        var worker = new Worker(_workerLogger, httpClientFactory, lifetime, diagnostics, configService);
         worker.CurrentConfig = new ExternalConfiguration
         {
             ApiEndpoint = "http://localhost/webhook",
@@ -77,8 +85,12 @@ public class WorkerRetryTests
         var lifetime = new TestHostApplicationLifetime();
         var diagnostics = new DiagnosticsService(_diagLogger);
         var configService = new ConfigurationService(_configLogger, "FileWatchRest_Test_Circuit");
+        var watcherManager = new FileWatcherManager(LoggerFactory.Create(builder => builder.AddDebug()).CreateLogger<FileWatcherManager>(), diagnostics);
+        var resilience = new HttpResilienceService(LoggerFactory.Create(builder => builder.AddDebug()).CreateLogger<HttpResilienceService>(), diagnostics);
+        var initial3 = await configService.LoadConfigurationAsync();
+        var optionsMonitor3 = new SimpleOptionsMonitor<ExternalConfiguration>(initial3);
+        var worker = new Worker(_workerLogger, httpClientFactory, lifetime, diagnostics, configService, watcherManager, resilience, optionsMonitor3);
 
-        var worker = new Worker(_workerLogger, httpClientFactory, lifetime, diagnostics, configService);
         worker.CurrentConfig = new ExternalConfiguration
         {
             ApiEndpoint = "http://localhost/webhook",
@@ -117,8 +129,12 @@ public class WorkerRetryTests
         var lifetime = new TestHostApplicationLifetime();
         var diagnostics = new DiagnosticsService(_diagLogger);
         var configService = new ConfigurationService(_configLogger, "FileWatchRest_Test_Auth");
+        var watcherManager = new FileWatcherManager(LoggerFactory.Create(builder => builder.AddDebug()).CreateLogger<FileWatcherManager>(), diagnostics);
+        var resilience = new HttpResilienceService(LoggerFactory.Create(builder => builder.AddDebug()).CreateLogger<HttpResilienceService>(), diagnostics);
+        var initial4 = await configService.LoadConfigurationAsync();
+        var optionsMonitor4 = new SimpleOptionsMonitor<ExternalConfiguration>(initial4);
+        var worker = new Worker(_workerLogger, httpClientFactory, lifetime, diagnostics, configService, watcherManager, resilience, optionsMonitor4);
 
-        var worker = new Worker(_workerLogger, httpClientFactory, lifetime, diagnostics, configService);
         worker.CurrentConfig = new ExternalConfiguration
         {
             ApiEndpoint = "http://localhost/webhook",

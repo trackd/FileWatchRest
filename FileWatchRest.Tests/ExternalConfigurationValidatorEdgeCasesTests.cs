@@ -15,8 +15,7 @@ public class ExternalConfigurationValidatorEdgeCasesTests
             Logging = new LoggingOptions { LogLevel = "Information" }
         };
 
-        var v = new ExternalConfigurationValidator();
-        var r = v.Validate(config);
+        var r = ExternalConfigurationValidator.Validate(config);
         r.IsValid.Should().BeFalse();
         r.Errors.Should().ContainSingle(e => e.PropertyName.Contains("ApiEndpoint"));
     }
@@ -37,8 +36,7 @@ public class ExternalConfigurationValidatorEdgeCasesTests
             DebounceMilliseconds = badValue
         };
 
-        var v = new ExternalConfigurationValidator();
-        var r = v.Validate(config);
+        var r = ExternalConfigurationValidator.Validate(config);
         r.IsValid.Should().BeFalse();
         r.Errors.Should().ContainSingle(e => e.PropertyName.Contains("DebounceMilliseconds"));
     }
@@ -56,8 +54,7 @@ public class ExternalConfigurationValidatorEdgeCasesTests
             Logging = new LoggingOptions { LogLevel = "Information" }
         };
 
-        var v = new ExternalConfigurationValidator();
-        var r = v.Validate(config);
+        var r = ExternalConfigurationValidator.Validate(config);
         r.IsValid.Should().BeFalse();
         r.Errors.Should().Contain(e => e.PropertyName.Contains("AllowedExtensions"));
     }

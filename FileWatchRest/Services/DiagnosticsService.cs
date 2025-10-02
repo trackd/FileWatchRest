@@ -2,6 +2,25 @@
 
 public class DiagnosticsService : IDisposable
 {
+    private static readonly Action<ILogger<DiagnosticsService>, string, Exception?> _attemptStartServer =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(1, "AttemptStartServer"), "Attempting to start diagnostics HTTP server at {Url}");
+    private static readonly Action<ILogger<DiagnosticsService>, string, Exception?> _serverStarted =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(2, "ServerStarted"), "Diagnostics HTTP server started successfully at {Url}");
+    private static readonly Action<ILogger<DiagnosticsService>, string, int, Exception?> _failedStartServer =
+        LoggerMessage.Define<string, int>(LogLevel.Error, new EventId(3, "FailedStartServer"), "Failed to start diagnostics HTTP server at {Url}. Error code: {ErrorCode}.");
+    private static readonly Action<ILogger<DiagnosticsService>, Exception?> _httpServerError =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(4, "HttpServerError"), "Error in diagnostics HTTP server");
+    private static readonly Action<ILogger<DiagnosticsService>, Exception?> _serializeStatusError =
+        LoggerMessage.Define(LogLevel.Error, new EventId(5, "SerializeStatusError"), "Failed to serialize status response");
+    private static readonly Action<ILogger<DiagnosticsService>, Exception?> _serializeHealthError =
+        LoggerMessage.Define(LogLevel.Error, new EventId(6, "SerializeHealthError"), "Failed to serialize health response");
+    private static readonly Action<ILogger<DiagnosticsService>, string, Exception?> _processRequestError =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(7, "ProcessRequestError"), "Error processing diagnostics request for path: {Path}");
+    private static readonly Action<ILogger<DiagnosticsService>, Exception?> _disposeError =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(8, "DisposeError"), "Error disposing diagnostics service");
+    private static readonly Action<ILogger<DiagnosticsService>, string, Exception?> _failedStartServerGeneral =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(9, "FailedStartServerGeneral"), "Failed to start diagnostics HTTP server at {Url}");
+
     private readonly ConcurrentDictionary<string, int> _restartAttempts = new();
     private readonly ConcurrentDictionary<string, byte> _activeWatchers = new();
     private readonly ConcurrentQueue<FileEventRecord> _events = new();
@@ -32,10 +51,7 @@ public class DiagnosticsService : IDisposable
 
         try
         {
-            if (_logger.IsEnabled(LogLevel.Information))
-            {
-                _logger.LogInformation("Attempting to start diagnostics HTTP server at {Url}", urlPrefix);
-            }
+            _attemptStartServer(_logger, urlPrefix, null);
 
             _httpListener = new HttpListener();
             _httpListener.Prefixes.Add(urlPrefix);
@@ -44,24 +60,15 @@ public class DiagnosticsService : IDisposable
             _cancellationTokenSource = new CancellationTokenSource();
             _serverTask = Task.Run(() => HandleHttpRequests(_cancellationTokenSource.Token));
 
-            if (_logger.IsEnabled(LogLevel.Information))
-            {
-                _logger.LogInformation("Diagnostics HTTP server started successfully at {Url}", urlPrefix);
-            }
+            _serverStarted(_logger, urlPrefix, null);
         }
         catch (HttpListenerException ex)
         {
-            if (_logger.IsEnabled(LogLevel.Error))
-            {
-                _logger.LogError(ex, "Failed to start diagnostics HTTP server at {Url}. Error code: {ErrorCode}. This may require administrator permissions or the URL may be reserved by another application.", urlPrefix, ex.ErrorCode);
-            }
+            _failedStartServer(_logger, urlPrefix, ex.ErrorCode, ex);
         }
         catch (Exception ex)
         {
-            if (_logger.IsEnabled(LogLevel.Error))
-            {
-                _logger.LogError(ex, "Failed to start diagnostics HTTP server at {Url}", urlPrefix);
-            }
+            _failedStartServerGeneral(_logger, urlPrefix, ex);
         }
     }
 
@@ -84,7 +91,7 @@ public class DiagnosticsService : IDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error in diagnostics HTTP server");
+                _httpServerError(_logger, ex);
             }
         }
     }
@@ -139,7 +146,7 @@ public class DiagnosticsService : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Failed to serialize status response");
+                        _serializeStatusError(_logger, ex);
                         responseText = $"{{\"error\":\"Serialization failed\",\"message\":\"{ex.Message.Replace("\"", "\\\"")}\",\"timestamp\":\"{DateTimeOffset.Now:O}\"}}";
                     }
                     break;
@@ -156,7 +163,7 @@ public class DiagnosticsService : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Failed to serialize health response");
+                        _serializeHealthError(_logger, ex);
                         responseText = $"{{\"status\":\"healthy\",\"timestamp\":\"{DateTimeOffset.Now:O}\",\"serializationError\":\"{ex.Message.Replace("\"", "\\\"")}\"}}";
                     }
                     break;
@@ -201,7 +208,7 @@ public class DiagnosticsService : IDisposable
                     var error = new ErrorResponse
                     {
                         Error = "Not found",
-                        AvailableEndpoints = ["/status", "/health", "/events", "/watchers", "/test", "/metrics"]
+                        AvailableEndpoints = new[] { "/status", "/health", "/events", "/watchers", "/test", "/metrics" }
                     };
                     responseText = JsonSerializer.Serialize(error, typeof(ErrorResponse), MyJsonContext.Default);
                     break;
@@ -217,10 +224,7 @@ public class DiagnosticsService : IDisposable
         }
         catch (Exception ex)
         {
-            if (_logger.IsEnabled(LogLevel.Error))
-            {
-                _logger.LogError(ex, "Error processing diagnostics request for path: {Path}", context.Request.Url?.AbsolutePath ?? "unknown");
-            }
+            _processRequestError(_logger, context.Request.Url?.AbsolutePath ?? "unknown", ex);
             try
             {
                 var errorResponse = "{ \"error\": \"Internal server error\", \"message\": \"" + ex.Message.Replace("\"", "\\\"") + "\" }";
@@ -233,7 +237,7 @@ public class DiagnosticsService : IDisposable
             }
             catch (Exception innerEx)
             {
-                _logger.LogError(innerEx, "Failed to send error response");
+                _processRequestError(_logger, context.Request.Url?.AbsolutePath ?? "unknown", innerEx);
             }
         }
     }
@@ -327,7 +331,7 @@ public class DiagnosticsService : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error disposing diagnostics service");
+            _disposeError(_logger, ex);
         }
     }
 }

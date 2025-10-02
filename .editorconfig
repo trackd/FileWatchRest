@@ -1,31 +1,9 @@
-# Set severity for all analyzers that are enabled by default (https://docs.microsoft.com/en-us/visualstudio/code-quality/use-roslyn-analyzers?view=vs-2022#set-rule-severity-of-multiple-analyzer-rules-at-once-in-an-editorconfig-file)
-dotnet_analyzer_diagnostic.category-roslynator.severity = default|none|silent|suggestion|warning|error
-
-# Enable/disable all analyzers by default
-# NOTE: This option can be used only in .roslynatorconfig file
-roslynator_analyzers.enabled_by_default = true #|false
-
-# Set severity for a specific analyzer
-# dotnet_diagnostic.<ANALYZER_ID>.severity = default|none|silent|suggestion|warning|error
-
-# Enable/disable all refactorings
-roslynator_refactorings.enabled = true #|false
-
-# Enable/disable specific refactoring
-# roslynator_refactoring.<REFACTORING_NAME>.enabled = true|false
-
-# Enable/disable all compiler diagnostic fixes
-roslynator_compiler_diagnostic_fixes.enabled = true #|false
-
-# Enable/disable specific compiler diagnostic fix
-# roslynator_compiler_diagnostic_fix.<COMPILER_DIAGNOSTIC_ID>.enabled = true|false
+root = true
 
 [*.cs]
-# Reduce CA1873 severity to warning to avoid failing builds for logging argument evaluations
-dotnet_diagnostic.CA1873.severity = warning
-
-# Treat the custom analyzer reporting file-level using directives as a warning.
-dotnet_diagnostic.FW0001.severity = warning
-
-# Optional: ensure analyzers run with formatting fixes available to dotnet-format
-dotnet_analyzer_diagnostic.category-Performance.severity = warning
+# Standard editorconfig settings - keep formatting consistent across the repository
+indent_style = space
+indent_size = 4
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true

@@ -1,6 +1,6 @@
 ﻿namespace FileWatchRest.Logging;
 
-public sealed class SimpleFileLoggerProvider : ILoggerProvider
+public sealed partial class SimpleFileLoggerProvider : ILoggerProvider
 {
     private readonly object _sync = new();
     private readonly ConcurrentDictionary<string, SimpleFileLogger> _loggers = new();
@@ -317,12 +317,15 @@ public sealed class SimpleFileLoggerProvider : ILoggerProvider
         // Look for a 3-digit HTTP status code in the message as a fallback
         if (!string.IsNullOrEmpty(entry.Message))
         {
-            var m = Regex.Match(entry.Message, @"\b(1\d{2}|2\d{2}|3\d{2}|4\d{2}|5\d{2})\b");
+            var m = HttpStatusRegex().Match(entry.Message);
             if (m.Success && int.TryParse(m.Value, out var v)) return v;
         }
 
         return null;
     }
+
+    [GeneratedRegex("\\b(1\\d{2}|2\\d{2}|3\\d{2}|4\\d{2}|5\\d{2})\\b")]
+    private static partial Regex HttpStatusRegex();
 
     public void Dispose()
     {

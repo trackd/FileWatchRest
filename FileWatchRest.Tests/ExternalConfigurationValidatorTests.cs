@@ -15,8 +15,7 @@ public class ExternalConfigurationValidatorTests
             Logging = new LoggingOptions { LogLevel = "Information" }
         };
 
-        var validator = new ExternalConfigurationValidator();
-        var result = validator.Validate(config);
+        var result = ExternalConfigurationValidator.Validate(config);
 
         result.IsValid.Should().BeTrue();
         result.Errors.Should().BeEmpty();
@@ -27,7 +26,7 @@ public class ExternalConfigurationValidatorTests
     {
         var config = new ExternalConfiguration
         {
-            Folders = Array.Empty<string>(),
+            Folders = [],
             ApiEndpoint = "http://localhost:8080/api/files",
             ProcessedFolder = "processed",
             DiagnosticsUrlPrefix = "http://localhost:5005/",
@@ -35,8 +34,7 @@ public class ExternalConfigurationValidatorTests
             Logging = new LoggingOptions { LogLevel = "Information" }
         };
 
-        var validator = new ExternalConfigurationValidator();
-        var result = validator.Validate(config);
+        var result = ExternalConfigurationValidator.Validate(config);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().ContainSingle();
@@ -56,8 +54,7 @@ public class ExternalConfigurationValidatorTests
             Logging = new LoggingOptions { LogLevel = "Information" }
         };
 
-        var validator = new ExternalConfigurationValidator();
-        var result = validator.Validate(config);
+        var result = ExternalConfigurationValidator.Validate(config);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().ContainSingle();

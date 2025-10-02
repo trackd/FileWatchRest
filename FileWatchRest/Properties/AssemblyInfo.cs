@@ -1,3 +1,1 @@
-﻿using System.Runtime.CompilerServices;
-
-[assembly: InternalsVisibleTo("FileWatchRest.Tests")]
+﻿[assembly: InternalsVisibleTo("FileWatchRest.Tests")]

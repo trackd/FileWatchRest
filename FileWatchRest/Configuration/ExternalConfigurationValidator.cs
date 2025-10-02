@@ -2,7 +2,7 @@
 
 public sealed class ExternalConfigurationValidator
 {
-    public ValidationResult Validate(ExternalConfiguration config)
+    public static ValidationResult Validate(ExternalConfiguration config)
     {
         var errors = new List<ValidationFailure>();
 
