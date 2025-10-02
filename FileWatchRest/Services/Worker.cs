@@ -220,7 +220,8 @@ public partial class Worker : BackgroundService
         // If we were replaced by the AddOrUpdate callback, ensure the replacement is the one we created
         if (!ReferenceEquals(newCts, existing))
         {
-            // if existing is the newly added one, we still have the correct token; otherwise, cancel ours and use the existing one
+            // Handle race condition: if another thread added a different CancellationTokenSource for this path,
+            // dispose ours and use the one that was actually added to the dictionary.
             try { newCts.Cancel(false); newCts.Dispose(); } catch { }
             newCts = existing;
         }
