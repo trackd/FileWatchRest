@@ -3,10 +3,11 @@
 /// <summary>
 /// A tiny, test-friendly IOptionsMonitor implementation which holds a single value and allows manual change notifications.
 /// </summary>
-public class SimpleOptionsMonitor<T> : IOptionsMonitor<T>
+public class SimpleOptionsMonitor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T> : IOptionsMonitor<T>
 {
     private T _value;
-    private readonly List<Action<T, string>> _listeners = new();
+    // Use nullable string in delegate to match the IOptionsMonitor<T>.OnChange(Action<T,string?>) signature
+    private readonly List<Action<T, string?>> _listeners = [];
     private readonly object _sync = new();
 
     public SimpleOptionsMonitor(T initial)
@@ -26,7 +27,7 @@ public class SimpleOptionsMonitor<T> : IOptionsMonitor<T>
 
     public void Raise(T newValue)
     {
-        Action<T, string>[] copy;
+        Action<T, string?>[] copy;
         lock (_sync) { _value = newValue; copy = _listeners.ToArray(); }
         foreach (var cb in copy) cb(newValue, string.Empty);
     }

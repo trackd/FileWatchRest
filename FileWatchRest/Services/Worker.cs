@@ -372,6 +372,16 @@ public partial class Worker : BackgroundService
         return notification;
     }
 
+    // Helper extracted from SendNotificationAsync to decide whether to use multipart streaming for a given notification.
+    private bool ShouldUseStreamingUpload(FileNotification notification)
+    {
+        if (!_currentConfig.PostFileContents) return false;
+        if (!notification.FileSize.HasValue) return false;
+        var size = notification.FileSize.Value;
+        var threshold = Math.Max(0, _currentConfig.StreamingThresholdBytes);
+        return size > threshold && size <= _currentConfig.MaxContentBytes;
+    }
+
     internal async Task<bool> SendNotificationAsync(FileNotification notification, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(_currentConfig.ApiEndpoint))
@@ -385,19 +395,18 @@ public partial class Worker : BackgroundService
         // Prepare a factory to create a fresh HttpRequestMessage for each attempt so streaming content is created per attempt.
         Func<HttpRequestMessage> requestFactory = () =>
         {
-            // Decide sending strategy: small files -> JSON payload including content; larger but acceptable files -> multipart stream
-            var streamThreshold = Math.Max(0, _currentConfig.StreamingThresholdBytes);
-            if (_currentConfig.PostFileContents && notification.FileSize.HasValue && notification.FileSize.Value > streamThreshold && notification.FileSize.Value <= _currentConfig.MaxContentBytes)
-            {
-                var metadataObj = new UploadMetadata
-                {
-                    Path = notification.Path,
-                    FileSize = notification.FileSize,
-                    LastWriteTime = notification.LastWriteTime
-                };
+            // Decide sending strategy: use streaming upload when appropriate
+            if (ShouldUseStreamingUpload(notification))
+             {
+                 var metadataObj = new UploadMetadata
+                 {
+                     Path = notification.Path,
+                     FileSize = notification.FileSize,
+                     LastWriteTime = notification.LastWriteTime
+                 };
 
                 var multipart = new MultipartFormDataContent();
-                var metadataJson = JsonSerializer.Serialize(metadataObj, MyJsonContext.Default.UploadMetadata);
+                 var metadataJson = JsonSerializer.Serialize(metadataObj, MyJsonContext.Default.UploadMetadata);
                 var metadataContent = new StringContent(metadataJson, Encoding.UTF8);
                 metadataContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
                 multipart.Add(metadataContent, "metadata");
@@ -417,32 +426,32 @@ public partial class Worker : BackgroundService
                     _attachingAuthDebug(_logger, _currentConfig.ApiEndpoint ?? string.Empty, token, null);
                 }
                 return reqMsg;
-            }
-            else
-            {
-                var bytes = JsonSerializer.SerializeToUtf8Bytes(notification, MyJsonContext.Default.FileNotification);
-                var content = new ByteArrayContent(bytes);
-                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-                var reqMsg = new HttpRequestMessage(HttpMethod.Post, _currentConfig.ApiEndpoint) { Content = content };
-                if (!string.IsNullOrWhiteSpace(_currentConfig.BearerToken))
-                {
-                    var token = _currentConfig.BearerToken;
-                    if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) token = token[7..].Trim();
-                    reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                    _attachingAuthDebug(_logger, _currentConfig.ApiEndpoint ?? string.Empty, token, null);
-                }
-                return reqMsg;
-            }
-        };
+             }
+             else
+             {
+                 var bytes = JsonSerializer.SerializeToUtf8Bytes(notification, MyJsonContext.Default.FileNotification);
+                 var content = new ByteArrayContent(bytes);
+                 content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                 var reqMsg = new HttpRequestMessage(HttpMethod.Post, _currentConfig.ApiEndpoint) { Content = content };
+                 if (!string.IsNullOrWhiteSpace(_currentConfig.BearerToken))
+                 {
+                     var token = _currentConfig.BearerToken;
+                     if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) token = token[7..].Trim();
+                     reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                     _attachingAuthDebug(_logger, _currentConfig.ApiEndpoint ?? string.Empty, token, null);
+                 }
+                 return reqMsg;
+             }
+         };
 
-        var endpointKey = string.IsNullOrWhiteSpace(_currentConfig.ApiEndpoint) ? string.Empty : _currentConfig.ApiEndpoint;
+         var endpointKey = string.IsNullOrWhiteSpace(_currentConfig.ApiEndpoint) ? string.Empty : _currentConfig.ApiEndpoint;
 
-        var result = await _resilienceService.SendWithRetriesAsync(requestFactory, fileClient, endpointKey, _currentConfig, ct);
+         var result = await _resilienceService.SendWithRetriesAsync(requestFactory, fileClient, endpointKey, _currentConfig, ct);
 
-        // Diagnostics and logging for this file are recorded here using the worker's notification path
-        _diagnostics.RecordFileEvent(notification.Path, result.Success, result.LastStatusCode);
+         // Diagnostics and logging for this file are recorded here using the worker's notification path
+         _diagnostics.RecordFileEvent(notification.Path, result.Success, result.LastStatusCode);
 
-        if (result.ShortCircuited)
+         if (result.ShortCircuited)
         {
             _circuitOpenSkipWarning(_logger, endpointKey ?? string.Empty, notification.Path, null);
             return false;
