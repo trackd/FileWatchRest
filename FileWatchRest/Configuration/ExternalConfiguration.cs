@@ -16,9 +16,9 @@ public class ExternalConfiguration
     /// Plain text tokens are automatically encrypted on first save.
     /// </summary>
     public string? BearerToken { get; set; }
-    public bool PostFileContents { get; set; } = false;
+    public bool PostFileContents { get; set; }
     public string ProcessedFolder { get; set; } = "processed";
-    public bool MoveProcessedFiles { get; set; } = false;
+    public bool MoveProcessedFiles { get; set; }
     public string[] AllowedExtensions { get; set; } = [];
     public bool IncludeSubdirectories { get; set; } = true;
     public int DebounceMilliseconds { get; set; } = 1000;
@@ -32,7 +32,7 @@ public class ExternalConfiguration
     public int ChannelCapacity { get; set; } = 1000;
     public int MaxParallelSends { get; set; } = 4;
     public int FileWatcherInternalBufferSize { get; set; } = 64 * 1024;
-    public int WaitForFileReadyMilliseconds { get; set; } = 0;
+    public int WaitForFileReadyMilliseconds { get; set; }
 
     /// <summary>
     /// Maximum number of bytes to include when reading file contents for posting.
@@ -48,7 +48,7 @@ public class ExternalConfiguration
     public long StreamingThresholdBytes { get; set; } = 256 * 1024; // 256 KB default
 
     // Circuit breaker settings (optional)
-    public bool EnableCircuitBreaker { get; set; } = false;
+    public bool EnableCircuitBreaker { get; set; }
     public int CircuitBreakerFailureThreshold { get; set; } = 5; // failures before opening
     public int CircuitBreakerOpenDurationMilliseconds { get; set; } = 30_000; // 30s open by default
 

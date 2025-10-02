@@ -125,6 +125,12 @@ try
             services.AddSingleton<DiagnosticsService>();
             services.AddSingleton<ConfigurationService>(provider =>
                 new ConfigurationService(provider.GetRequiredService<ILogger<ConfigurationService>>(), "FileWatchRest"));
+
+            // Expose the external configuration through the standard Options monitor pattern
+            services.AddSingleton<IOptionsMonitor<ExternalConfiguration>, ExternalConfigurationOptionsMonitor>();
+
+            services.AddSingleton<IResilienceService, HttpResilienceService>();
+            services.AddSingleton<FileWatcherManager>();
             services.AddHostedService<Worker>();
         })
         .Build();

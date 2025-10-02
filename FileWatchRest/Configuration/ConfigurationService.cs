@@ -5,6 +5,45 @@
 /// </summary>
 public class ConfigurationService : IDisposable
 {
+    private static readonly Action<ILogger<ConfigurationService>, string, Exception?> _configFileNotFound =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(1, "ConfigFileNotFound"), "Configuration file not found at {Path}, creating default configuration");
+    private static readonly Action<ILogger<ConfigurationService>, string, Exception?> _migratedLoggingSettings =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(2, "MigratedLoggingSettings"), "Migrated legacy logging settings to Logging.LogLevel for configuration at {Path}");
+    private static readonly Action<ILogger<ConfigurationService>, string, Exception?> _loggingMigrationFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(3, "LoggingMigrationFailed"), "Logging migration attempt failed for {Path} - proceeding with deserialized config");
+    private static readonly Action<ILogger<ConfigurationService>, string, Exception?> _configDeserializationFailed =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(4, "ConfigDeserializationFailed"), "Configuration file {Path} could not be deserialized; using defaults");
+    private static readonly Action<ILogger<ConfigurationService>, string, Exception?> _loadedConfigurationInvalid =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(5, "LoadedConfigurationInvalid"), "Loaded configuration is invalid: {Errors}");
+    private static readonly Action<ILogger<ConfigurationService>, Exception?> _configValidationWarning =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(6, "ConfigValidationWarning"), "Configuration validation threw an exception; proceeding with loaded configuration");
+    private static readonly Action<ILogger<ConfigurationService>, bool, Exception?> _checkingTokenEncryption =
+        LoggerMessage.Define<bool>(LogLevel.Debug, new EventId(7, "CheckingTokenEncryption"), "Checking bearer token encryption status. Token starts with 'enc:': {IsEncrypted}");
+    private static readonly Action<ILogger<ConfigurationService>, Exception?> _decryptingToken =
+        LoggerMessage.Define(LogLevel.Information, new EventId(8, "DecryptingToken"), "Encrypted token detected, decrypting for runtime use");
+    private static readonly Action<ILogger<ConfigurationService>, Exception?> _encryptingToken =
+        LoggerMessage.Define(LogLevel.Information, new EventId(9, "EncryptingToken"), "Found plain text bearer token, encrypting for secure storage");
+    private static readonly Action<ILogger<ConfigurationService>, string, Exception?> _failedToLoad =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(10, "FailedToLoad"), "Failed to load configuration from {Path}, using default");
+    private static readonly Action<ILogger<ConfigurationService>, string, Exception?> _configSaved =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(11, "ConfigSaved"), "Configuration saved to {Path}");
+    private static readonly Action<ILogger<ConfigurationService>, string, Exception?> _failedToSave =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(12, "FailedToSave"), "Failed to save configuration to {Path}");
+    private static readonly Action<ILogger<ConfigurationService>, Exception?> _runtimeValidationWarning =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(19, "RuntimeConfigValidationWarning"), "Runtime configuration validation threw an exception; proceeding with decrypted configuration");
+    private static readonly Action<ILogger<ConfigurationService>, Exception?> _encryptionNotAvailable =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(20, "EncryptionNotAvailable"), "Windows encryption not available - bearer token will remain in plain text");
+    private static readonly Action<ILogger<ConfigurationService>, Exception?> _failedToDecryptToken =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(21, "FailedToDecryptToken"), "Failed to decrypt bearer token, treating as plain text");
+    private static readonly Action<ILogger<ConfigurationService>, string, Exception?> _startedWatchingConfig =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(22, "StartedWatchingConfig"), "Started watching configuration file {Path}");
+    private static readonly Action<ILogger<ConfigurationService>, Exception?> _failedToStartWatcher =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(23, "FailedToStartWatcher"), "Failed to start watching configuration file");
+    private static readonly Action<ILogger<ConfigurationService>, string, Exception?> _configReloadedInfo =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(24, "ConfigReloaded"), "Configuration reloaded from {Path}");
+    private static readonly Action<ILogger<ConfigurationService>, Exception?> _failedReloadWarning =
+        LoggerMessage.Define(LogLevel.Warning, new EventId(25, "FailedReloadAfterChange"), "Failed to reload configuration after file change");
+
     private readonly ILogger<ConfigurationService> _logger;
     private readonly string _configFilePath;
     private FileSystemWatcher? _configWatcher;
@@ -30,10 +69,7 @@ public class ConfigurationService : IDisposable
 
         if (!File.Exists(_configFilePath))
         {
-            if (_logger.IsEnabled(LogLevel.Information))
-            {
-                _logger.LogInformation("Configuration file not found at {Path}, creating default configuration", _configFilePath);
-            }
+            _configFileNotFound(_logger, _configFilePath, null);
             await CreateDefaultConfigurationAsync(cancellationToken);
         }
 
@@ -175,10 +211,7 @@ public class ConfigurationService : IDisposable
 
                     if (migrated)
                     {
-                        if (_logger.IsEnabled(LogLevel.Information))
-                        {
-                            _logger.LogInformation("Migrated legacy logging settings to Logging.LogLevel for configuration at {Path}", _configFilePath);
-                        }
+                        _migratedLoggingSettings(_logger, _configFilePath, null);
                         // Persist the migrated configuration back to disk (this will also ensure tokens are encrypted)
                         await SaveConfigurationAsync(config, cancellationToken);
 
@@ -201,10 +234,7 @@ public class ConfigurationService : IDisposable
             }
             catch (Exception ex)
             {
-                if (_logger.IsEnabled(LogLevel.Warning))
-                {
-                    _logger.LogWarning(ex, "Logging migration attempt failed for {Path} - proceeding with deserialized config", _configFilePath);
-                }
+                _loggingMigrationFailed(_logger, _configFilePath, ex);
             }
 
             // Validate the deserialized configuration early to avoid loading invalid settings.
@@ -212,24 +242,17 @@ public class ConfigurationService : IDisposable
             {
                 if (config is null)
                 {
-                    if (_logger.IsEnabled(LogLevel.Warning))
-                    {
-                        _logger.LogWarning("Configuration file {Path} could not be deserialized; using defaults", _configFilePath);
-                    }
+                    _configDeserializationFailed(_logger, _configFilePath, null);
                     lock (_configLock)
                     {
                         _currentConfig = new ExternalConfiguration();
                         return _currentConfig;
                     }
                 }
-                 var validator = new ExternalConfigurationValidator();
-                 var validationResult = validator.Validate(config);
+                 var validationResult = ExternalConfigurationValidator.Validate(config);
                  if (!validationResult.IsValid)
                  {
-                     if (_logger.IsEnabled(LogLevel.Error))
-                     {
-                         _logger.LogError("Loaded configuration is invalid: {Errors}", string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
-                     }
+                     _loadedConfigurationInvalid(_logger, string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)), null);
                      lock (_configLock)
                      {
                          _currentConfig = new ExternalConfiguration();
@@ -239,22 +262,18 @@ public class ConfigurationService : IDisposable
              }
              catch (Exception ex)
              {
-                 _logger.LogWarning(ex, "Configuration validation threw an exception; proceeding with loaded configuration");
+                 _configValidationWarning(_logger, ex);
              }
              // Decrypt the bearer token if it's encrypted
             if (config is not null && !string.IsNullOrWhiteSpace(config.BearerToken))
              {
-                if (_logger.IsEnabled(LogLevel.Debug))
-                {
-                    _logger.LogDebug("Checking bearer token encryption status. Token starts with 'enc:': {IsEncrypted}",
-                        config.BearerToken.StartsWith("enc:"));
-                }
-
+                _checkingTokenEncryption(_logger, config.BearerToken.StartsWith("enc:"), null);
                 try
                 {
                     if (OperatingSystem.IsWindows() && SecureConfigurationHelper.IsTokenEncrypted(config.BearerToken))
                     {
-                        _logger.LogInformation("Encrypted token detected, decrypting for runtime use");
+                        _decryptingToken(_logger, null);
+
                         // Create a copy for runtime use with decrypted token
                         var runtimeConfig = new ExternalConfiguration
                         {
@@ -288,24 +307,15 @@ public class ConfigurationService : IDisposable
                         // Validate runtime configuration (after decrypt) before returning
                         try
                         {
-                            var runtimeValidator = new ExternalConfigurationValidator();
-                            var runtimeValidation = runtimeValidator.Validate(runtimeConfig);
+                            var runtimeValidation = ExternalConfigurationValidator.Validate(runtimeConfig);
                             if (!runtimeValidation.IsValid)
                             {
-                                if (_logger.IsEnabled(LogLevel.Error))
-                                {
-                                    _logger.LogError("Runtime configuration (after decryption) is invalid: {Errors}", string.Join("; ", runtimeValidation.Errors.Select(e => e.ErrorMessage)));
-                                }
-                                lock (_configLock)
-                                {
-                                    _currentConfig = new ExternalConfiguration();
-                                    return _currentConfig;
-                                }
+                                _loadedConfigurationInvalid(_logger, string.Join("; ", runtimeValidation.Errors.Select(e => e.ErrorMessage)), null);
                             }
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogWarning(ex, "Runtime configuration validation threw an exception; proceeding with decrypted configuration");
+                            _runtimeValidationWarning(_logger, ex);
                         }
 
                         lock (_configLock)
@@ -313,11 +323,11 @@ public class ConfigurationService : IDisposable
                             _currentConfig = runtimeConfig;
                             return _currentConfig;
                         }
-                    }
-                    else if (OperatingSystem.IsWindows())
-                    {
+                     }
+                     else if (OperatingSystem.IsWindows())
+                     {
                         // Plain text token found - encrypt it and save back to file
-                        _logger.LogInformation("Found plain text bearer token, encrypting for secure storage");
+                        _encryptingToken(_logger, null);
 
                         // Save the configuration with encrypted token
                         await SaveConfigurationAsync(config, cancellationToken);
@@ -328,44 +338,35 @@ public class ConfigurationService : IDisposable
                             _currentConfig = config;
                             return _currentConfig;
                         }
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Windows encryption not available - bearer token will remain in plain text");
-                    }
+                     }
+                     else
+                     {
+                        _encryptionNotAvailable(_logger, null);
+                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to decrypt bearer token, treating as plain text");
+                    _failedToDecryptToken(_logger, ex);
                     // Continue with the original config if decryption fails
                 }
-            }
+             }
 
             // Final validation before accepting the loaded configuration (fallback to defaults on failure)
             if (config is not null)
             {
                 try
                 {
-                    var finalValidator = new ExternalConfigurationValidator();
-                    var finalResult = finalValidator.Validate(config);
+                    var finalResult = ExternalConfigurationValidator.Validate(config);
                     if (!finalResult.IsValid)
                     {
-                        if (_logger.IsEnabled(LogLevel.Error))
-                        {
-                            _logger.LogError("Final configuration validation failed: {Errors}", string.Join("; ", finalResult.Errors.Select(e => e.ErrorMessage)));
-                        }
-                        lock (_configLock)
-                        {
-                            _currentConfig = new ExternalConfiguration();
-                            return _currentConfig;
-                        }
-                    }
+                        _loadedConfigurationInvalid(_logger, string.Join("; ", finalResult.Errors.Select(e => e.ErrorMessage)), null);
+                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Final configuration validation threw an exception; proceeding with loaded configuration");
+                    _configValidationWarning(_logger, ex);
                 }
-            }
+             }
 
             lock (_configLock)
             {
@@ -375,17 +376,14 @@ public class ConfigurationService : IDisposable
         }
         catch (Exception ex)
         {
-            if (_logger.IsEnabled(LogLevel.Error))
-            {
-                _logger.LogError(ex, "Failed to load configuration from {Path}, using default", _configFilePath);
-            }
-            lock (_configLock)
-            {
-                _currentConfig = new ExternalConfiguration();
-                return _currentConfig;
-            }
-        }
-    }
+            _failedToLoad(_logger, _configFilePath, ex);
+             lock (_configLock)
+             {
+                 _currentConfig = new ExternalConfiguration();
+                 return _currentConfig;
+             }
+         }
+     }
 
     public async Task SaveConfigurationAsync(ExternalConfiguration config, CancellationToken cancellationToken = default)
     {
@@ -425,20 +423,14 @@ public class ConfigurationService : IDisposable
                 _currentConfig = config; // Store the runtime config (with decrypted token)
             }
 
-            if (_logger.IsEnabled(LogLevel.Information))
-            {
-                _logger.LogInformation("Configuration saved to {Path}", _configFilePath);
-            }
+            _configSaved(_logger, _configFilePath, null);
         }
         catch (Exception ex)
         {
-            if (_logger.IsEnabled(LogLevel.Error))
-            {
-                _logger.LogError(ex, "Failed to save configuration to {Path}", _configFilePath);
-            }
-            throw;
-        }
-    }
+            _failedToSave(_logger, _configFilePath, ex);
+             throw;
+         }
+     }
 
     public void StartWatching(Func<ExternalConfiguration, Task> onConfigChanged)
     {
@@ -457,14 +449,11 @@ public class ConfigurationService : IDisposable
             _configWatcher.Created += async (_, _) => await OnConfigFileChanged(onConfigChanged);
             _configWatcher.EnableRaisingEvents = true;
 
-            if (_logger.IsEnabled(LogLevel.Information))
-            {
-                _logger.LogInformation("Started watching configuration file {Path}", _configFilePath);
-            }
+            _startedWatchingConfig(_logger, _configFilePath, null);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to start watching configuration file");
+            _failedToStartWatcher(_logger, ex);
         }
     }
 
@@ -484,14 +473,11 @@ public class ConfigurationService : IDisposable
             var newConfig = await LoadConfigurationAsync();
             await onConfigChanged(newConfig);
 
-            if (_logger.IsEnabled(LogLevel.Information))
-            {
-                _logger.LogInformation("Configuration reloaded from {Path}", _configFilePath);
-            }
+            _configReloadedInfo(_logger, _configFilePath, null);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to reload configuration after file change");
+            _failedReloadWarning(_logger, ex);
         }
     }
 
@@ -500,12 +486,12 @@ public class ConfigurationService : IDisposable
         var defaultConfig = new ExternalConfiguration
         {
             // Core file watching settings
-            Folders = [@"C:\temp\watch"],
+            Folders = new[] { @"C:\temp\watch" },
             ApiEndpoint = "http://localhost:8080/api/files",
             PostFileContents = false,
             MoveProcessedFiles = false,
             ProcessedFolder = "processed",
-            AllowedExtensions = [".txt", ".json", ".xml"],
+            AllowedExtensions = new[] { ".txt", ".json", ".xml" },
             IncludeSubdirectories = true,
             DebounceMilliseconds = 1000,
 
