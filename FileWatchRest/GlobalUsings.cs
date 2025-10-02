@@ -16,5 +16,4 @@ global using FileWatchRest.Models;
 global using FileWatchRest.Logging;
 global using FileWatchRest.Services;
 global using Microsoft.Extensions.Options;
-// global using Microsoft.Extensions.DependencyInjection;
 global using System.Runtime.CompilerServices;
