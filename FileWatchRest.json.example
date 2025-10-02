@@ -21,6 +21,7 @@
   "WatcherMaxRestartAttempts": 3,
   "WatcherRestartDelayMilliseconds": 1000,
   "DiagnosticsUrlPrefix": "http://localhost:5005/",
+  "DiagnosticsBearerToken": "your-diagnostics-bearer-token-or-omit-to-auto-generate",
   "ChannelCapacity": 1000,
   "MaxParallelSends": 4,
   "FileWatcherInternalBufferSize": 65536,

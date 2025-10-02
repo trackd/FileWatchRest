@@ -140,6 +140,7 @@ public class ConfigurationService : IDisposable
                         if (doc.RootElement.TryGetProperty("PostFileContents", out var pfc) && (pfc.ValueKind == JsonValueKind.True || pfc.ValueKind == JsonValueKind.False)) manual.PostFileContents = pfc.GetBoolean();
                         if (doc.RootElement.TryGetProperty("MoveProcessedFiles", out var mpf) && (mpf.ValueKind == JsonValueKind.True || mpf.ValueKind == JsonValueKind.False)) manual.MoveProcessedFiles = mpf.GetBoolean();
                         if (doc.RootElement.TryGetProperty("BearerToken", out var bt) && bt.ValueKind == JsonValueKind.String) manual.BearerToken = bt.GetString();
+                        if (doc.RootElement.TryGetProperty("DiagnosticsBearerToken", out var dbt) && dbt.ValueKind == JsonValueKind.String) manual.DiagnosticsBearerToken = dbt.GetString();
 
                         // Logging section
                         if (doc.RootElement.TryGetProperty("Logging", out var loggingElem) && loggingElem.ValueKind == JsonValueKind.Object)
@@ -264,22 +265,30 @@ public class ConfigurationService : IDisposable
              {
                  _configValidationWarning(_logger, ex);
              }
-             // Decrypt the bearer token if it's encrypted
-            if (config is not null && !string.IsNullOrWhiteSpace(config.BearerToken))
-             {
-                _checkingTokenEncryption(_logger, config.BearerToken.StartsWith("enc:"), null);
+            // Decrypt/encrypt any bearer tokens (API and Diagnostics) as needed
+            if (config is not null)
+            {
+                var hasApiToken = !string.IsNullOrWhiteSpace(config.BearerToken);
+                var hasDiagToken = !string.IsNullOrWhiteSpace(config.DiagnosticsBearerToken);
+
+                if (hasApiToken) _checkingTokenEncryption(_logger, config.BearerToken!.StartsWith("enc:"), null);
+                if (hasDiagToken) _checkingTokenEncryption(_logger, config.DiagnosticsBearerToken!.StartsWith("enc:"), null);
+
                 try
                 {
-                    if (OperatingSystem.IsWindows() && SecureConfigurationHelper.IsTokenEncrypted(config.BearerToken))
+                    // If any token is encrypted, decrypt the encrypted ones for runtime use
+                    if (OperatingSystem.IsWindows() &&
+                        ((hasApiToken && SecureConfigurationHelper.IsTokenEncrypted(config.BearerToken)) || (hasDiagToken && SecureConfigurationHelper.IsTokenEncrypted(config.DiagnosticsBearerToken))))
                     {
                         _decryptingToken(_logger, null);
 
-                        // Create a copy for runtime use with decrypted token
                         var runtimeConfig = new ExternalConfiguration
                         {
                             Folders = config.Folders,
                             ApiEndpoint = config.ApiEndpoint,
-                            BearerToken = SecureConfigurationHelper.DecryptBearerToken(config.BearerToken),
+                            BearerToken = hasApiToken && SecureConfigurationHelper.IsTokenEncrypted(config.BearerToken)
+                                ? SecureConfigurationHelper.DecryptBearerToken(config.BearerToken!)
+                                : config.BearerToken,
                             PostFileContents = config.PostFileContents,
                             ProcessedFolder = config.ProcessedFolder,
                             MoveProcessedFiles = config.MoveProcessedFiles,
@@ -291,6 +300,9 @@ public class ConfigurationService : IDisposable
                             WatcherMaxRestartAttempts = config.WatcherMaxRestartAttempts,
                             WatcherRestartDelayMilliseconds = config.WatcherRestartDelayMilliseconds,
                             DiagnosticsUrlPrefix = config.DiagnosticsUrlPrefix,
+                            DiagnosticsBearerToken = hasDiagToken && SecureConfigurationHelper.IsTokenEncrypted(config.DiagnosticsBearerToken)
+                                ? SecureConfigurationHelper.DecryptBearerToken(config.DiagnosticsBearerToken!)
+                                : config.DiagnosticsBearerToken,
                             ChannelCapacity = config.ChannelCapacity,
                             MaxParallelSends = config.MaxParallelSends,
                             FileWatcherInternalBufferSize = config.FileWatcherInternalBufferSize,
@@ -323,33 +335,36 @@ public class ConfigurationService : IDisposable
                             _currentConfig = runtimeConfig;
                             return _currentConfig;
                         }
-                     }
-                     else if (OperatingSystem.IsWindows())
-                     {
-                        // Plain text token found - encrypt it and save back to file
-                        _encryptingToken(_logger, null);
+                    }
 
-                        // Save the configuration with encrypted token
-                        await SaveConfigurationAsync(config, cancellationToken);
-
-                        // Return the runtime config with plain text token for use
-                        lock (_configLock)
+                    // If tokens exist in plain text and encryption is available, encrypt and persist them
+                    if (OperatingSystem.IsWindows() && (hasApiToken || hasDiagToken))
+                    {
+                        // If any plain token exists, encrypt and save
+                        if ((hasApiToken && !SecureConfigurationHelper.IsTokenEncrypted(config.BearerToken)) || (hasDiagToken && !SecureConfigurationHelper.IsTokenEncrypted(config.DiagnosticsBearerToken)))
                         {
-                            _currentConfig = config;
-                            return _currentConfig;
+                            _encryptingToken(_logger, null);
+                            await SaveConfigurationAsync(config, cancellationToken);
+
+                            // Return the runtime config with plain text tokens for runtime use
+                            lock (_configLock)
+                            {
+                                _currentConfig = config;
+                                return _currentConfig;
+                            }
                         }
-                     }
-                     else
-                     {
+                    }
+                    else if (!OperatingSystem.IsWindows() && (hasApiToken || hasDiagToken))
+                    {
                         _encryptionNotAvailable(_logger, null);
-                     }
+                    }
                 }
                 catch (Exception ex)
                 {
                     _failedToDecryptToken(_logger, ex);
                     // Continue with the original config if decryption fails
                 }
-             }
+            }
 
             // Final validation before accepting the loaded configuration (fallback to defaults on failure)
             if (config is not null)
@@ -397,6 +412,9 @@ public class ConfigurationService : IDisposable
                 BearerToken = OperatingSystem.IsWindows()
                     ? SecureConfigurationHelper.EnsureTokenIsEncrypted(config.BearerToken)
                     : config.BearerToken,
+                DiagnosticsBearerToken = OperatingSystem.IsWindows()
+                    ? SecureConfigurationHelper.EnsureTokenIsEncrypted(config.DiagnosticsBearerToken)
+                    : config.DiagnosticsBearerToken,
                 PostFileContents = config.PostFileContents,
                 ProcessedFolder = config.ProcessedFolder,
                 MoveProcessedFiles = config.MoveProcessedFiles,

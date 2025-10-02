@@ -52,6 +52,8 @@ public partial class Worker : BackgroundService
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(24, "InvalidLogLevel"), "Invalid LogLevel '{LogLevel}' in configuration. Valid values: Trace, Debug, Information, Warning, Error, Critical, None");
     private static readonly Action<ILogger<Worker>, string, Exception?> _failedConfigureLoggingWarning =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(25, "FailedConfigureLogging"), "Failed to configure logging level from '{LogLevel}', using Information");
+    private static readonly Action<ILogger<Worker>, string, string, Exception?> _requestCorrelationDebug =
+        LoggerMessage.Define<string, string>(LogLevel.Debug, new EventId(34, "RequestCorrelation"), "Request {RequestId} for Path {Path}");
     private static readonly Action<ILogger<Worker>, Exception?> _noFoldersScanDebug =
         LoggerMessage.Define(LogLevel.Debug, new EventId(26, "NoFoldersScan"), "No folders configured - skipping existing-files scan");
     private static readonly Action<ILogger<Worker>, string, Exception?> _configuredFolderMissingWarning =
@@ -73,7 +75,8 @@ public partial class Worker : BackgroundService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ConfigurationService _configService;
     private readonly FileWatcherManager _fileWatcherManager;
-    private readonly ConcurrentDictionary<string, CancellationTokenSource> _debounceCts = new();
+    private readonly ConcurrentDictionary<string, DateTime> _pending = new(StringComparer.OrdinalIgnoreCase);
+    private Task? _debounceSchedulerTask;
     private Channel<string>? _sendChannel;
     private List<Task>? _senderTasks;
     private readonly IHostApplicationLifetime _lifetime;
@@ -119,8 +122,9 @@ public partial class Worker : BackgroundService
 
         _loadedConfig(_logger, _currentConfig.Folders.Length, null);
 
-        // Start diagnostics HTTP server
-        _diagnostics.StartHttpServer(_currentConfig.DiagnosticsUrlPrefix);
+    // Configure diagnostics access token and start HTTP server
+    _diagnostics.SetBearerToken(_currentConfig.DiagnosticsBearerToken);
+    _diagnostics.StartHttpServer(_currentConfig.DiagnosticsUrlPrefix);
 
         // Start watching for configuration changes via options monitor (monitor registers the file watcher)
         _optionsSubscription = _optionsMonitor.OnChange(async (newCfg, name) => await OnConfigurationChanged(newCfg));
@@ -141,6 +145,9 @@ public partial class Worker : BackgroundService
          {
              _senderTasks.Add(Task.Run(() => SenderLoopAsync(_sendChannel.Reader, stoppingToken), stoppingToken));
          }
+
+        // Start centralized debounce scheduler
+        _debounceSchedulerTask = Task.Run(() => DebounceSchedulerLoop(stoppingToken), stoppingToken);
 
         // Enqueue existing files that were added while service was down
         await EnqueueExistingFilesAsync(stoppingToken);
@@ -209,55 +216,64 @@ public partial class Worker : BackgroundService
 
     private void ScheduleEnqueueAfterDebounce(string path, int debounceMs)
     {
-        // Cancel any existing scheduled enqueue for this path and schedule a fresh one.
-        var newCts = new CancellationTokenSource();
-        var existing = _debounceCts.AddOrUpdate(path, newCts, (_, old) =>
-        {
-            try { old.Cancel(false); old.Dispose(); } catch { }
-            return newCts;
-        });
+        // Update pending timestamp for this path (UTC to avoid timezone issues)
+        _pending.AddOrUpdate(path, DateTime.UtcNow, (_, __) => DateTime.UtcNow);
+        return;
+    }
 
-        // If we were replaced by the AddOrUpdate callback, ensure the replacement is the one we created
-        if (!ReferenceEquals(newCts, existing))
+    private async Task DebounceSchedulerLoop(CancellationToken ct)
+    {
+        try
         {
-            // Handle race condition: if another thread added a different CancellationTokenSource for this path,
-            // dispose ours and use the one that was actually added to the dictionary.
-            try { newCts.Cancel(false); newCts.Dispose(); } catch { }
-            newCts = existing;
-        }
-
-        // Schedule the actual enqueue task
-        _ = Task.Run(async () =>
-        {
-            try
+            while (!ct.IsCancellationRequested)
             {
-                await Task.Delay(debounceMs, newCts.Token);
-                if (newCts.IsCancellationRequested) return;
-
-                if (_sendChannel is not null)
+                try
                 {
-                    if (!_sendChannel.Writer.TryWrite(path))
+                    if (_pending.IsEmpty)
                     {
-                        await _sendChannel.Writer.WriteAsync(path, newCts.Token);
+                        await Task.Delay(100, ct);
+                        continue;
                     }
+
+                    var now = DateTime.Now;
+                    var due = new List<string>();
+                    foreach (var kv in _pending)
+                    {
+                        if ((now - kv.Value).TotalMilliseconds >= _currentConfig.DebounceMilliseconds)
+                        {
+                            if (_pending.TryRemove(kv.Key, out _)) due.Add(kv.Key);
+                        }
+                    }
+
+                    if (due.Count > 0 && _sendChannel is not null)
+                    {
+                        foreach (var p in due)
+                        {
+                            // Backpressure policy: try immediate write, otherwise attempt to write with short timeout
+                            if (!_sendChannel.Writer.TryWrite(p))
+                            {
+                                var writeTask = _sendChannel.Writer.WriteAsync(p, ct).AsTask();
+                                var completed = await Task.WhenAny(writeTask, Task.Delay(1000, ct));
+                                if (completed != writeTask)
+                                {
+                                    // Timed out; drop and log
+                                    _failedQueueExistingFileWarning(_logger, p, null);
+                                }
+                            }
+                        }
+                    }
+
+                    await Task.Delay(100, ct);
                 }
-            }
-            catch (OperationCanceledException) { }
-            catch (Exception ex)
-            {
-                if (_logger.IsEnabled(LogLevel.Warning)) _failedSchedulingDebounce(_logger, path, ex);
-            }
-            finally
-            {
-                // Clean up the token if it still maps to this path
-                _debounceCts.TryGetValue(path, out var cur);
-                if (ReferenceEquals(cur, newCts))
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
+                catch (Exception ex)
                 {
-                    _debounceCts.TryRemove(path, out _);
-                    try { newCts.Dispose(); } catch { }
+                    if (_logger.IsEnabled(LogLevel.Warning)) _failedSchedulingDebounce(_logger, "<scheduler>", ex);
+                    await Task.Delay(1000, ct);
                 }
             }
-        });
+        }
+        catch { /* swallow */ }
     }
 
     private async Task SenderLoopAsync(ChannelReader<string> reader, CancellationToken ct)
@@ -373,7 +389,7 @@ public partial class Worker : BackgroundService
     }
 
     // Helper extracted from SendNotificationAsync to decide whether to use multipart streaming for a given notification.
-    private bool ShouldUseStreamingUpload(FileNotification notification)
+    internal bool ShouldUseStreamingUpload(FileNotification notification)
     {
         if (!_currentConfig.PostFileContents) return false;
         if (!notification.FileSize.HasValue) return false;
@@ -393,20 +409,20 @@ public partial class Worker : BackgroundService
         using var fileClient = _httpClientFactory.CreateClient("fileApi");
 
         // Prepare a factory to create a fresh HttpRequestMessage for each attempt so streaming content is created per attempt.
-        Func<HttpRequestMessage> requestFactory = () =>
+        Func<CancellationToken, Task<HttpRequestMessage>> requestFactory = async ct =>
         {
             // Decide sending strategy: use streaming upload when appropriate
             if (ShouldUseStreamingUpload(notification))
-             {
-                 var metadataObj = new UploadMetadata
-                 {
-                     Path = notification.Path,
-                     FileSize = notification.FileSize,
-                     LastWriteTime = notification.LastWriteTime
-                 };
+            {
+                var metadataObj = new UploadMetadata
+                {
+                    Path = notification.Path,
+                    FileSize = notification.FileSize,
+                    LastWriteTime = notification.LastWriteTime
+                };
 
                 var multipart = new MultipartFormDataContent();
-                 var metadataJson = JsonSerializer.Serialize(metadataObj, MyJsonContext.Default.UploadMetadata);
+                var metadataJson = JsonSerializer.Serialize(metadataObj, MyJsonContext.Default.UploadMetadata);
                 var metadataContent = new StringContent(metadataJson, Encoding.UTF8);
                 metadataContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
                 multipart.Add(metadataContent, "metadata");
@@ -425,24 +441,33 @@ public partial class Worker : BackgroundService
                     reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
                     _attachingAuthDebug(_logger, _currentConfig.ApiEndpoint ?? string.Empty, token, null);
                 }
+                // Add a short-lived correlation id to help trace the request across logs and diagnostics
+                var requestId = Guid.NewGuid().ToString("N");
+                if (!reqMsg.Headers.Contains("X-Request-Id")) reqMsg.Headers.Add("X-Request-Id", requestId);
+                _requestCorrelationDebug(_logger, requestId, notification.Path, null);
                 return reqMsg;
-             }
-             else
-             {
-                 var bytes = JsonSerializer.SerializeToUtf8Bytes(notification, MyJsonContext.Default.FileNotification);
-                 var content = new ByteArrayContent(bytes);
-                 content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-                 var reqMsg = new HttpRequestMessage(HttpMethod.Post, _currentConfig.ApiEndpoint) { Content = content };
-                 if (!string.IsNullOrWhiteSpace(_currentConfig.BearerToken))
-                 {
-                     var token = _currentConfig.BearerToken;
-                     if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) token = token[7..].Trim();
-                     reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                     _attachingAuthDebug(_logger, _currentConfig.ApiEndpoint ?? string.Empty, token, null);
-                 }
-                 return reqMsg;
-             }
-         };
+            }
+            else
+            {
+                var bytes = JsonSerializer.SerializeToUtf8Bytes(notification, MyJsonContext.Default.FileNotification);
+                var ms = new MemoryStream(bytes, writable: false);
+                var content = new StreamContent(ms);
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                var reqMsg = new HttpRequestMessage(HttpMethod.Post, _currentConfig.ApiEndpoint) { Content = content };
+                if (!string.IsNullOrWhiteSpace(_currentConfig.BearerToken))
+                {
+                    var token = _currentConfig.BearerToken;
+                    if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) token = token[7..].Trim();
+                    reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    _attachingAuthDebug(_logger, _currentConfig.ApiEndpoint ?? string.Empty, token, null);
+                }
+                // Correlate request with a unique id for tracing
+                var requestId = Guid.NewGuid().ToString("N");
+                if (!reqMsg.Headers.Contains("X-Request-Id")) reqMsg.Headers.Add("X-Request-Id", requestId);
+                _requestCorrelationDebug(_logger, requestId, notification.Path, null);
+                return reqMsg;
+            }
+        };
 
          var endpointKey = string.IsNullOrWhiteSpace(_currentConfig.ApiEndpoint) ? string.Empty : _currentConfig.ApiEndpoint;
 
@@ -529,6 +554,8 @@ public partial class Worker : BackgroundService
 
             // Apply logging configuration from the reloaded config
             ConfigureLogging(newConfig.Logging?.LogLevel);
+            // Update diagnostics bearer token in case it changed
+            _diagnostics.SetBearerToken(newConfig.DiagnosticsBearerToken);
 
             _configReloadedInfo(_logger, null);
         }
@@ -560,14 +587,12 @@ public partial class Worker : BackgroundService
 
         _optionsSubscription?.Dispose();
 
-        // Cancel any outstanding debounced tasks
-        var tokens = _debounceCts.Values.ToArray();
-        foreach (var t in tokens)
+        // Wait for debounce scheduler to finish (it will observe the stopping token cancellation)
+        if (_debounceSchedulerTask is not null)
         {
-            try { t.Cancel(false); } catch { }
-            try { t.Dispose(); } catch { }
+            try { await Task.WhenAny(_debounceSchedulerTask, Task.Delay(1000)); } catch { }
         }
-        _debounceCts.Clear();
+        _pending.Clear();
 
         if (_sendChannel is not null)
         {

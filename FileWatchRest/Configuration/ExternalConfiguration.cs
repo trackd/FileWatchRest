@@ -29,6 +29,15 @@ public class ExternalConfiguration
     public int WatcherMaxRestartAttempts { get; set; } = 3;
     public int WatcherRestartDelayMilliseconds { get; set; } = 1000;
     public string DiagnosticsUrlPrefix { get; set; } = "http://localhost:5005/";
+    /// <summary>
+    /// Optional bearer token required to access diagnostics endpoints (if set).
+    /// If null or empty, diagnostics remain open as before.
+    /// </summary>
+    /// <summary>
+    /// Optional bearer token required to access diagnostics endpoints.
+    /// If not provided, a random token will be generated when a configuration instance is created.
+    /// </summary>
+    public string? DiagnosticsBearerToken { get; set; } = Guid.NewGuid().ToString("N");
     public int ChannelCapacity { get; set; } = 1000;
     public int MaxParallelSends { get; set; } = 4;
     public int FileWatcherInternalBufferSize { get; set; } = 64 * 1024;

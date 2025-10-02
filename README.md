@@ -72,6 +72,7 @@ Example configuration:
   "WatcherMaxRestartAttempts": 3,
   "WatcherRestartDelayMilliseconds": 1000,
   "DiagnosticsUrlPrefix": "http://localhost:5005/",
+  "DiagnosticsBearerToken": "your-diagnostics-bearer-token-or-omit-to-auto-generate",
   "ChannelCapacity": 1000,
   "MaxParallelSends": 4,
   "FileWatcherInternalBufferSize": 65536,
@@ -112,6 +113,7 @@ Configuration Options
 - `WatcherMaxRestartAttempts`: Max attempts to restart a failed file watcher (default: 3)
 - `WatcherRestartDelayMilliseconds`: Delay before restarting a watcher (default: 1000)
 - `DiagnosticsUrlPrefix`: URL prefix for diagnostics endpoint (default: "<http://localhost:5005/>")
+- `DiagnosticsBearerToken`: Optional bearer token required to access diagnostics endpoints. If omitted the service will generate a secure random token on first run and persist it in the configuration file.
 - `ChannelCapacity`: Internal channel capacity for pending file events (default: 1000)
 - `MaxParallelSends`: Number of concurrent HTTP senders (default: 4)
 - `FileWatcherInternalBufferSize`: FileSystemWatcher buffer size in bytes (default: 65536)
@@ -220,7 +222,8 @@ Diagnostics Endpoints
 Examples  
 --------  
 
-**GET /status**  
+GET /status
+------------
 
 ```json
 {
@@ -239,7 +242,8 @@ Examples
 }
 ```
 
-**GET /health**  
+GET /health
+-----------
 
 ```json
 {
@@ -248,7 +252,8 @@ Examples
 }
 ```
 
-**GET /events**  
+GET /events
+----------
 
 ```json
 [
@@ -281,6 +286,17 @@ Examples
 2. Open browser to `http://localhost:5005/status`
 3. Monitor file processing in real-time
 4. Use `/events` for troubleshooting failed file processing
+
+Security and accessing diagnostics
+--------------------------------
+
+When `DiagnosticsBearerToken` is set (or auto-generated when omitted), all diagnostics endpoints require a matching Authorization header with a bearer token. Example using curl:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:5005/status
+```
+
+If you do not explicitly set `DiagnosticsBearerToken` in your configuration file, the service will generate a random token on first run and persist it in the configuration file so you can use it to access diagnostics. Treat this token like any other secret — rotate it if you believe it has been exposed.
 
 Logging
 -------

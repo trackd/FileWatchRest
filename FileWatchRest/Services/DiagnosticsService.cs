@@ -34,6 +34,8 @@ public class DiagnosticsService : IDisposable
     private long _enqueuedTotal;
     private long _processedSuccessTotal;
     private long _processedFailureTotal;
+    private readonly ConcurrentBag<IResilienceMetricsProvider> _resilienceProviders = new();
+    private string? _requiredBearerToken;
     // Track circuit state per endpoint for diagnostics
     private readonly ConcurrentDictionary<string, CircuitStateInfo> _circuitStates = new();
 
@@ -42,6 +44,17 @@ public class DiagnosticsService : IDisposable
         _logger = logger;
         _processedSuccessCounter = _meter.CreateCounter<long>("file_processed_success_total");
         _processedFailureCounter = _meter.CreateCounter<long>("file_processed_failure_total");
+    }
+
+    public void RegisterResilienceMetricsProvider(IResilienceMetricsProvider provider)
+    {
+        if (provider is null) return;
+        _resilienceProviders.Add(provider);
+    }
+
+    public void SetBearerToken(string? token)
+    {
+        _requiredBearerToken = string.IsNullOrWhiteSpace(token) ? null : token;
     }
 
     public void StartHttpServer(string urlPrefix)
@@ -124,6 +137,18 @@ public class DiagnosticsService : IDisposable
 
             var path = request.Url?.AbsolutePath ?? "/";
 
+            // If a bearer token is configured, require it for all endpoints
+            if (!string.IsNullOrWhiteSpace(_requiredBearerToken))
+            {
+                var auth = request.Headers?["Authorization"];
+                if (string.IsNullOrWhiteSpace(auth) || !auth.Equals("Bearer " + _requiredBearerToken, StringComparison.Ordinal))
+                {
+                    response.StatusCode = 401;
+                    response.Close();
+                    return;
+                }
+            }
+
             string responseText;
             string contentType = "application/json";
 
@@ -199,6 +224,30 @@ public class DiagnosticsService : IDisposable
                     sb.AppendLine("# HELP circuit_open_total Number of endpoints with open circuit breakers");
                     sb.AppendLine("# TYPE circuit_open_total gauge");
                     sb.AppendLine($"circuit_open_total {openCount}");
+
+                    // Aggregate resilience provider metrics (HTTP attempts/failures/short_circuits)
+                    long attemptsSum = 0, failuresSum = 0, shortCircuitsSum = 0;
+                    foreach (var p in _resilienceProviders)
+                    {
+                        try
+                        {
+                            var s = p.GetMetricsSnapshot();
+                            attemptsSum += s.Attempts;
+                            failuresSum += s.Failures;
+                            shortCircuitsSum += s.ShortCircuits;
+                        }
+                        catch { }
+                    }
+
+                    sb.AppendLine("# HELP http_attempts_total Number of HTTP attempts");
+                    sb.AppendLine("# TYPE http_attempts_total counter");
+                    sb.AppendLine($"http_attempts_total {attemptsSum}");
+                    sb.AppendLine("# HELP http_failures_total Number of HTTP failures");
+                    sb.AppendLine("# TYPE http_failures_total counter");
+                    sb.AppendLine($"http_failures_total {failuresSum}");
+                    sb.AppendLine("# HELP http_short_circuits_total Number of short-circuited HTTP requests");
+                    sb.AppendLine("# TYPE http_short_circuits_total counter");
+                    sb.AppendLine($"http_short_circuits_total {shortCircuitsSum}");
                     responseText = sb.ToString();
                     contentType = "text/plain";
                     break;

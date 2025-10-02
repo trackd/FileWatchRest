@@ -29,6 +29,16 @@ public class FileWatcherManager : IDisposable
     private readonly ConcurrentDictionary<string, FileSystemWatcher> _watchers = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, int> _restartAttempts = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _sync = new();
+    // For testing: allow registering folder metadata and simulate watcher errors without OS watchers
+    private readonly ConcurrentDictionary<string, FolderInfo> _folderInfos = new(StringComparer.OrdinalIgnoreCase);
+
+    private sealed class FolderInfo
+    {
+        public ExternalConfiguration? Config;
+        public FileSystemEventHandler? OnChanged;
+        public Action<string, ErrorEventArgs>? OnError;
+        public Action<string>? OnExceeded;
+    }
 
     public FileWatcherManager(ILogger<FileWatcherManager> logger, DiagnosticsService diagnostics)
     {
@@ -71,6 +81,8 @@ public class FileWatcherManager : IDisposable
 
                 if (_watchers.TryAdd(folder, watcher))
                 {
+                    // store callbacks for testing or later use
+                    _folderInfos[folder] = new FolderInfo { Config = config, OnChanged = onChanged, OnError = onError, OnExceeded = onExceededRestartAttempts };
                     _diagnostics.RegisterWatcher(folder);
                     _watchingFolder(_logger, folder, null);
                 }
@@ -146,6 +158,28 @@ public class FileWatcherManager : IDisposable
                 _diagnostics.UnregisterWatcher(k);
             }
         }
+        return Task.CompletedTask;
+    }
+
+    // Register a folder without creating an actual FileSystemWatcher - used by unit tests to exercise restart logic
+    internal void RegisterFolderForTest(string folder, ExternalConfiguration config, FileSystemEventHandler onChanged, Action<string, ErrorEventArgs>? onError, Action<string>? onExceeded)
+    {
+        if (string.IsNullOrWhiteSpace(folder)) return;
+        _folderInfos[folder] = new FolderInfo { Config = config, OnChanged = onChanged, OnError = onError, OnExceeded = onExceeded };
+    }
+
+    // Simulate an error for the given folder; will invoke the same restart logic as a real watcher error.
+    internal Task SimulateWatcherErrorAsync(string folder, Exception ex)
+    {
+        if (!_folderInfos.TryGetValue(folder, out var info) || info.Config is null)
+            return Task.CompletedTask;
+
+        try
+        {
+            HandleWatcherError(folder, new ErrorEventArgs(ex), info.Config, info.OnChanged ?? ((s, e) => { }), info.OnError, info.OnExceeded);
+        }
+        catch { }
+
         return Task.CompletedTask;
     }
 
