@@ -520,7 +520,7 @@ public class ConfigurationService : IDisposable
                 LogType = LogType.Csv,
                 FilePathPattern = "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}",
                 UseJsonFile = false, // JSON is opt-in
-                JsonFilePath = "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}.ndjson",
+                JsonFilePath = "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}.json",
                 UseCsvFile = true,   // CSV enabled by default
                 CsvFilePath = "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}.csv",
                 LogLevel = "Information",

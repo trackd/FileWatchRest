@@ -81,7 +81,7 @@ try
     }
     string JsonLogFilePath(string basePath)
     {
-        return Path.HasExtension(basePath) ? basePath : basePath + ".ndjson";
+        return Path.HasExtension(basePath) ? basePath : basePath + ".json";
     }
 
     var csvLogFile = CsvLogFilePath(baseResolved);
