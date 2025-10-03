@@ -376,16 +376,6 @@ Configuration Management
 Coding standards & developer tooling
 ----------------------------------
 
-To keep imports consistent across the repository we enforce "global using" only. All C# using directives must be declared in `FileWatchRest/GlobalUsings.cs`. File-level `using` directives are not allowed and will fail the build.
-
-To ensure developers get fast feedback locally and in CI:
-
-- A pre-commit hook is provided under `githooks/pre-commit` that runs `dotnet restore`, `dotnet build`, and `dotnet test`. To install the hooks locally run:
-
-```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass .\tools\install-git-hooks.ps1
-```
-
 - CI runs on GitHub Actions (see `.github/workflows/ci.yml`) and performs restore, build, tests and a format check. The CI will also fail if any file-level using directives are present (via the repository `Directory.Build.targets` enforcement).
 
 If a build error points out a file-level using, move that using to `FileWatchRest/GlobalUsings.cs` and re-run the build or format tools.
@@ -394,27 +384,3 @@ If a build error points out a file-level using, move that using to `FileWatchRes
 
 FileWatchRest - Modern file watching service with REST API integration
 ------------------------------------------------------------------
-
-What changed in this branch
--------------------------
-
-- File watching and restart logic has been moved into a dedicated FileWatcherManager for clearer lifecycle and restart handling.
-- HTTP resilience (retries, backoff, optional circuit breaker) has been extracted into an internal HttpResilienceService — no third-party runtime deps were added.
-- Runtime configuration is exposed via an IOptionsMonitor-style wrapper that watches the configuration file and notifies subscribers on changes.
-- High-performance structured logging sites were converted to use Microsoft.Extensions.Logging.LoggerMessage (source-defined delegates) to reduce allocations on hot paths.
-
-These refactors improve separation of concerns and make the service safer to run at scale; the configuration model and on-disk JSON remain the single source of truth.
-
-Logging (finalized)
--------------------
-
-The built-in file logging provider is configured via the `Logging` section of the external configuration (`FileWatchRest.json`). Key fields:
-
-- `LogType` ("Csv" | "Json" | "Both") — selects which provider(s) write logs.
-- `FilePathPattern` (string) — single filename or pattern the provider uses; the provider appends `.csv` or `.ndjson` as appropriate.
-- `LogLevel` (string) — canonical logging level used by the service. Use values: Trace, Debug, Information, Warning, Error, Critical, None.
-- `RetainedFileCountLimit` (int) — number of historical log files to keep (older files are pruned).
-- Legacy compatibility: `UseJsonFile`/`UseCsvFile` and `JsonFilePath`/`CsvFilePath` remain supported for existing configs but `LogType` + `FilePathPattern` is the preferred shape.
-
-Notes and best practices
---------------------
