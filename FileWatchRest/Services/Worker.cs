@@ -70,6 +70,12 @@ public partial class Worker : BackgroundService
         LoggerMessage.Define(LogLevel.Warning, new EventId(32, "UnexpectedErrorScanningFolders"), "Unexpected error scanning folders for existing files");
     private static readonly Action<ILogger<Worker>, string, Exception?> _watcherErrorWarning =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(33, "WatcherErrorWorker"), "FileSystemWatcher error for folder {Folder}");
+    private static readonly Action<ILogger<Worker>, string, int, Exception?> _waitingForFileReady =
+        LoggerMessage.Define<string, int>(LogLevel.Debug, new EventId(35, "WaitingForFileReady"), "Waiting up to {WaitMs}ms for file {Path} to become ready and non-empty");
+    private static readonly Action<ILogger<Worker>, string, int, Exception?> _fileStillEmptyWarning =
+        LoggerMessage.Define<string, int>(LogLevel.Warning, new EventId(36, "FileStillEmpty"), "File {Path} remained empty after waiting {WaitMs}ms");
+    private static readonly Action<ILogger<Worker>, string, Exception?> _skippingZeroLengthFile =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(37, "SkippingZeroLengthFile"), "Skipping zero-length file {Path} after waiting for content");
 
     private readonly ILogger<Worker> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -284,7 +290,13 @@ public partial class Worker : BackgroundService
             {
                 if (_currentConfig.WaitForFileReadyMilliseconds > 0)
                 {
-                    await WaitForFileReadyAsync(path, ct);
+                    var ready = await WaitForFileReadyAsync(path, ct);
+                    if (!ready)
+                    {
+                        // Configured to discard zero-length files and file remained empty - skip processing
+                        _diagnostics.RecordFileEvent(path, false, null);
+                        continue;
+                    }
                 }
 
                 var notification = await CreateNotificationAsync(path, ct);
@@ -308,21 +320,57 @@ public partial class Worker : BackgroundService
         }
     }
 
-    private async Task WaitForFileReadyAsync(string path, CancellationToken ct)
+    internal async Task<bool> WaitForFileReadyAsync(string path, CancellationToken ct)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        while (sw.ElapsedMilliseconds < _currentConfig.WaitForFileReadyMilliseconds)
+        var waited = false;
+        var waitMs = Math.Max(0, _currentConfig.WaitForFileReadyMilliseconds);
+        if (_logger.IsEnabled(LogLevel.Debug)) _waitingForFileReady(_logger, path, waitMs, null);
+
+        while (sw.ElapsedMilliseconds < waitMs)
         {
             try
             {
+                // Try to open for read to ensure the writer has released any exclusive locks
                 using var fs = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                break; // File is ready
+
+                if (!_currentConfig.PostFileContents)
+                {
+                    // We don't need content - file is considered ready if it can be opened
+                    return true;
+                }
+
+                // If PostFileContents is configured, wait until file length is non-zero
+                if (fs.Length > 0)
+                {
+                    return true;
+                }
+
+                // File exists and is readable but empty; continue waiting
+                waited = true;
             }
             catch
             {
-                await Task.Delay(50, ct);
+                // File not ready (locked/not present) - keep waiting
             }
+
+            try { await Task.Delay(50, ct); } catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
         }
+
+        if (waited)
+        {
+            _fileStillEmptyWarning(_logger, path, waitMs, null);
+        }
+
+        // If configured to discard zero-length files, indicate caller to skip processing
+        if (_currentConfig.DiscardZeroByteFiles)
+        {
+            _skippingZeroLengthFile(_logger, path, null);
+            return false;
+        }
+
+        // Otherwise, proceed (will process zero-length file)
+        return true;
     }
 
     private async Task ProcessFileAsync(string path, CancellationToken ct)

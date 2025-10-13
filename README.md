@@ -77,6 +77,7 @@ Example configuration:
   "MaxParallelSends": 4,
   "FileWatcherInternalBufferSize": 65536,
   "WaitForFileReadyMilliseconds": 0,
+  "DiscardZeroByteFiles": false,
   "MaxContentBytes": 5242880,
   "StreamingThresholdBytes": 262144,
   "EnableCircuitBreaker": false,
@@ -118,6 +119,7 @@ Configuration Options
 - `MaxParallelSends`: Number of concurrent HTTP senders (default: 4)
 - `FileWatcherInternalBufferSize`: FileSystemWatcher buffer size in bytes (default: 65536)
 - `WaitForFileReadyMilliseconds`: Wait time for files to become ready before processing (default: 0)
+- `DiscardZeroByteFiles`: If true, files that remain zero bytes after waiting the configured `WaitForFileReadyMilliseconds` will be discarded and not posted. Default: false. Use this when producers create zero-length placeholder files that should be ignored.
 - `MaxContentBytes`: Maximum bytes of file content to include in the POST request. Files larger than this are sent without inline content.
 - `StreamingThresholdBytes`: Size threshold for switching to streaming uploads. Files larger than this use multipart streaming for uploads.
 - `EnableCircuitBreaker`: Enables an optional circuit breaker for HTTP calls. When enabled, the circuit breaker trips after a number of failures, temporarily blocking requests to allow the remote service to recover.
@@ -222,8 +224,8 @@ Diagnostics Endpoints
 Examples  
 --------  
 
-GET /status
-------------
+GET /status  
+------------  
 
 ```json
 {
@@ -242,8 +244,8 @@ GET /status
 }
 ```
 
-GET /health
------------
+GET /health  
+-----------  
 
 ```json
 {
@@ -252,8 +254,8 @@ GET /health
 }
 ```
 
-GET /events
-----------
+GET /events  
+----------  
 
 ```json
 [
@@ -287,8 +289,8 @@ GET /events
 3. Monitor file processing in real-time
 4. Use `/events` for troubleshooting failed file processing
 
-Security and accessing diagnostics
---------------------------------
+Security and accessing diagnostics  
+--------------------------------  
 
 When `DiagnosticsBearerToken` is set (or auto-generated when omitted), all diagnostics endpoints require a matching Authorization header with a bearer token. Example using curl:
 
@@ -296,14 +298,16 @@ When `DiagnosticsBearerToken` is set (or auto-generated when omitted), all diagn
 curl -H "Authorization: Bearer <token>" http://localhost:5005/status
 ```
 
-If you do not explicitly set `DiagnosticsBearerToken` in your configuration file, the service will generate a random token on first run and persist it in the configuration file so you can use it to access diagnostics. Treat this token like any other secret — rotate it if you believe it has been exposed.
+If you do not explicitly set `DiagnosticsBearerToken` in your configuration file, the service will generate a random token on first run and persist it in the configuration file so you can use it to access diagnostics. Treat this token like any other secret — rotate it if you believe it has been exposed.  
 
-Logging
--------
+Note: when a diagnostics token is auto-generated (either when creating the default configuration or when adding the missing token to an existing configuration), the service logs the token once at startup so operators can find it. The token is then persisted to the configuration file and encrypted on Windows.  
 
-Logging is configured from the same external configuration file used by the service (`$env:ProgramData\\FileWatchRest\\FileWatchRest.json`)
+Logging  
+-------  
 
-You can select CSV, JSON, or both via the `Logging` / `LoggingOptions` settings in the configuration file. By default the service emits CSV logs and JSON is opt-in. The configuration now focuses on a single file name/pattern and an explicit `LogType` selector. The provider will append the correct file extension based on the `LogType` value.
+Logging is configured from the same external configuration file used by the service (`$env:ProgramData\\FileWatchRest\\FileWatchRest.json`)  
+
+You can select CSV, JSON, or both via the `Logging` / `LoggingOptions` settings in the configuration file. By default the service emits CSV logs and JSON is opt-in. The configuration now focuses on a single file name/pattern and an explicit `LogType` selector. The provider will append the correct file extension based on the `LogType` value.  
 
 Default logging locations (per-run timestamped by default):
 
@@ -373,12 +377,12 @@ Configuration Management
 - Configuration file can be edited manually or through automated deployment scripts
 - No need for separate `appsettings.json` modifications
 
-Coding standards & developer tooling
-----------------------------------
+Coding standards & developer tooling  
+----------------------------------  
 
 - CI runs on GitHub Actions (see `.github/workflows/ci.yml`) and performs restore, build, tests and a format check. The CI will also fail if any file-level using directives are present (via the repository `Directory.Build.targets` enforcement).
 
-If a build error points out a file-level using, move that using to `FileWatchRest/GlobalUsings.cs` and re-run the build or format tools.
+If a build error points out a file-level using, move that using to `FileWatchRest/GlobalUsings.cs` and re-run the build or format tools.  
 
 ---
 

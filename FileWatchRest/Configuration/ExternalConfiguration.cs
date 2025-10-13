@@ -56,6 +56,12 @@ public class ExternalConfiguration
     /// </summary>
     public long StreamingThresholdBytes { get; set; } = 256 * 1024; // 256 KB default
 
+    /// <summary>
+    /// If true, zero-byte files will be discarded after waiting for file readiness (see WaitForFileReadyMilliseconds).
+    /// Default: false (process zero-byte files if no content arrives within the configured wait time).
+    /// </summary>
+    public bool DiscardZeroByteFiles { get; set; } = false;
+
     // Circuit breaker settings (optional)
     public bool EnableCircuitBreaker { get; set; }
     public int CircuitBreakerFailureThreshold { get; set; } = 5; // failures before opening

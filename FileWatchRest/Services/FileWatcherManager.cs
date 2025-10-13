@@ -76,6 +76,8 @@ public class FileWatcherManager : IDisposable
 
                 watcher.Created += (s, e) => onChanged?.Invoke(s, e);
                 watcher.Changed += (s, e) => onChanged?.Invoke(s, e);
+                // Handle renames/moves into the watched folder
+                watcher.Renamed += (s, e) => onChanged?.Invoke(s, e);
                 watcher.Error += (s, e) => HandleWatcherError(folder, e, config, onChanged, onError, onExceededRestartAttempts);
                 watcher.EnableRaisingEvents = true;
 
@@ -177,6 +179,26 @@ public class FileWatcherManager : IDisposable
         try
         {
             HandleWatcherError(folder, new ErrorEventArgs(ex), info.Config, info.OnChanged ?? ((s, e) => { }), info.OnError, info.OnExceeded);
+        }
+        catch { }
+
+        return Task.CompletedTask;
+    }
+
+    // Simulate a rename (move) into the watched folder. The 'oldFullPath' is the source path
+    // and 'newFullPath' is the destination path within the watched folder.
+    internal Task SimulateRenamedAsync(string folder, string oldFullPath, string newFullPath)
+    {
+        if (!_folderInfos.TryGetValue(folder, out var info) || info.OnChanged is null)
+            return Task.CompletedTask;
+
+        try
+        {
+            var directory = Path.GetDirectoryName(newFullPath) ?? string.Empty;
+            var name = Path.GetFileName(newFullPath);
+            var oldName = Path.GetFileName(oldFullPath);
+            var args = new RenamedEventArgs(WatcherChangeTypes.Renamed, directory, name, oldName);
+            info.OnChanged?.Invoke(this, args);
         }
         catch { }
 

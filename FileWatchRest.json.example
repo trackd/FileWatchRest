@@ -26,6 +26,7 @@
   "MaxParallelSends": 4,
   "FileWatcherInternalBufferSize": 65536,
   "WaitForFileReadyMilliseconds": 0,
+  "DiscardZeroByteFiles": false,
   "MaxContentBytes": 5242880,
   "StreamingThresholdBytes": 262144,
   "EnableCircuitBreaker": false,
