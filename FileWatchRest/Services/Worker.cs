@@ -187,7 +187,9 @@ public partial class Worker : BackgroundService
 
     private void OnFileChanged(object? sender, FileSystemEventArgs e)
     {
-        if (e.ChangeType is not (WatcherChangeTypes.Created or WatcherChangeTypes.Changed))
+        // Accept Created, Changed, and Renamed events
+        // Renamed events occur when files are moved into the watched folder
+        if (e.ChangeType is not (WatcherChangeTypes.Created or WatcherChangeTypes.Changed or WatcherChangeTypes.Renamed))
             return;
 
         // Exclude files in the processed folder to prevent infinite loops
