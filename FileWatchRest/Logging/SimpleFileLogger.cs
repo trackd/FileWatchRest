@@ -69,7 +69,7 @@ internal sealed class SimpleFileLogger : ILogger
                 Category = _category,
                 FriendlyCategory = friendly,
                 Message = message,
-                Exception = exception?.ToString() ?? string.Empty,
+                Exception = FormatException(exception),
                 EventId = eventId.Id,
                 Properties = properties,
                 MachineName = Environment.MachineName,
@@ -82,6 +82,41 @@ internal sealed class SimpleFileLogger : ILogger
             // Swallow logging exceptions to avoid cascading failures.
         }
     }
+
+    private static string FormatException(Exception? exception)
+    {
+        if (exception is null) return string.Empty;
+
+        // For common exceptions, provide concise output without full stack traces
+        var result = new StringBuilder();
+        // Use pattern matching to avoid GetType() trimming issues
+        var typeName = GetExceptionTypeName(exception);
+        result.Append(typeName).Append(": ").Append(exception.Message);
+
+        // For inner exceptions, add just the type and message (no stack)
+        var inner = exception.InnerException;
+        if (inner is not null)
+        {
+            var innerTypeName = GetExceptionTypeName(inner);
+            result.Append(" --> ").Append(innerTypeName).Append(": ").Append(inner.Message);
+        }
+
+        return result.ToString();
+    }
+
+    private static string GetExceptionTypeName(Exception exception) => exception switch
+    {
+        HttpRequestException => nameof(HttpRequestException),
+        TimeoutException => nameof(TimeoutException),
+        TaskCanceledException => nameof(TaskCanceledException),
+        OperationCanceledException => nameof(OperationCanceledException),
+        IOException => nameof(IOException),
+        UnauthorizedAccessException => nameof(UnauthorizedAccessException),
+        ArgumentException => nameof(ArgumentException),
+        InvalidOperationException => nameof(InvalidOperationException),
+        NotSupportedException => nameof(NotSupportedException),
+        _ => "Exception" // Trim-safe fallback
+    };
 
     private static string Escape(string input)
     {

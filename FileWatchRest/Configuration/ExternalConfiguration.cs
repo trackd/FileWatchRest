@@ -91,15 +91,8 @@ public class LoggingOptions
     /// </summary>
     public string FilePathPattern { get; set; } = "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}";
 
-    // Legacy properties retained for backward compatibility with existing configuration files
-    public bool UseJsonFile { get; set; } = false; // JSON opt-in
-    public string JsonFilePath { get; set; } = "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}.json";
-    public bool UseCsvFile { get; set; } = true;
-    public string CsvFilePath { get; set; } = "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}.csv";
-
     // Canonical log level for the logging subsystem. Use string to preserve JSON readability and avoid coupling to Microsoft types in the configuration model.
     public string LogLevel { get; set; } = "Information";
-
     public int RetainedFileCountLimit { get; set; } = 14;
 }
 

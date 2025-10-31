@@ -1,9 +1,16 @@
-﻿namespace FileWatchRest.Services;
+﻿using FileWatchRest.Configuration;
+namespace FileWatchRest.Services;
 
 public partial class Worker : BackgroundService
 {
     private static readonly Action<ILogger<Worker>, int, Exception?> _loadedConfig =
         LoggerMessage.Define<int>(LogLevel.Information, new EventId(1, "LoadedConfig"), "Loaded external configuration with {FolderCount} folders");
+    private static readonly Action<ILogger<Worker>, string, string, Exception?> _checkingPattern =
+        LoggerMessage.Define<string, string>(LogLevel.Debug, new EventId(103, "CheckingPattern"), "Checking file '{FileName}' against pattern '{Pattern}'");
+    private static readonly Action<ILogger<Worker>, string, Exception?> _configFilePathLoaded =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(104, "ConfigFilePathLoaded"), "Loaded configuration file: {ConfigPath}");
+    private static readonly Action<ILogger<Worker>, string, string, Exception?> _excludedByPattern =
+        LoggerMessage.Define<string, string>(LogLevel.Information, new EventId(102, "ExcludedByPattern"), "File {FileName} excluded by pattern {Pattern}");
     private static readonly Action<ILogger<Worker>, Exception?> _noFoldersConfigured =
         LoggerMessage.Define(LogLevel.Warning, new EventId(2, "NoFoldersConfigured"), "No folders configured to watch. Update the configuration file in AppData.");
     private static readonly Action<ILogger<Worker>, string, Exception?> _watcherFailedStopping =
@@ -76,6 +83,14 @@ public partial class Worker : BackgroundService
         LoggerMessage.Define<string, int>(LogLevel.Warning, new EventId(36, "FileStillEmpty"), "File {Path} remained empty after waiting {WaitMs}ms");
     private static readonly Action<ILogger<Worker>, string, Exception?> _skippingZeroLengthFile =
         LoggerMessage.Define<string>(LogLevel.Information, new EventId(37, "SkippingZeroLengthFile"), "Skipping zero-length file {Path} after waiting for content");
+    private static readonly Action<ILogger<Worker>, string, int, string, Exception?> _httpErrorResponse =
+        LoggerMessage.Define<string, int, string>(LogLevel.Warning, new EventId(38, "HttpErrorResponse"), "HTTP error for {Path}: {StatusCode} {ReasonPhrase}");
+    private static readonly Action<ILogger<Worker>, string, int, Exception?> _retryingRequest =
+        LoggerMessage.Define<string, int>(LogLevel.Debug, new EventId(39, "RetryingRequest"), "Retrying request for {Path}, attempt {Attempt}");
+    private static readonly Action<ILogger<Worker>, string, Exception?> _httpRequestException =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(40, "HttpRequestException"), "Network error posting {Path}");
+    private static readonly Action<ILogger<Worker>, string, Exception?> _httpTimeoutException =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(41, "HttpTimeoutException"), "Request timeout posting {Path}");
 
     private readonly ILogger<Worker> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -121,6 +136,15 @@ public partial class Worker : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Load external configuration
+
+        // Log the config file path being loaded (if available)
+        if (_configService is null)
+            throw new InvalidOperationException("ConfigurationService is not initialized.");
+
+        if (!string.IsNullOrWhiteSpace(_configService.ConfigFilePath))
+        {
+            _configFilePathLoaded(_logger, _configService.ConfigFilePath, null);
+        }
         _currentConfig = await _configService.LoadConfigurationAsync(stoppingToken);
 
         // Apply logging configuration
@@ -128,9 +152,9 @@ public partial class Worker : BackgroundService
 
         _loadedConfig(_logger, _currentConfig.Folders.Length, null);
 
-    // Configure diagnostics access token and start HTTP server
-    _diagnostics.SetBearerToken(_currentConfig.DiagnosticsBearerToken);
-    _diagnostics.StartHttpServer(_currentConfig.DiagnosticsUrlPrefix);
+        // Configure diagnostics access token and start HTTP server
+        _diagnostics.SetBearerToken(_currentConfig.DiagnosticsBearerToken);
+        _diagnostics.StartHttpServer(_currentConfig.DiagnosticsUrlPrefix);
 
         // Start watching for configuration changes via options monitor (monitor registers the file watcher)
         _optionsSubscription = _optionsMonitor.OnChange(async (newCfg, name) => await OnConfigurationChanged(newCfg));
@@ -147,10 +171,10 @@ public partial class Worker : BackgroundService
         // Initialize send channel and sender tasks
         _sendChannel = Channel.CreateBounded<string>(_currentConfig.ChannelCapacity);
         _senderTasks = new List<Task>();
-         for (int i = 0; i < Math.Max(1, _currentConfig.MaxParallelSends); i++)
-         {
-             _senderTasks.Add(Task.Run(() => SenderLoopAsync(_sendChannel.Reader, stoppingToken), stoppingToken));
-         }
+        for (int i = 0; i < Math.Max(1, _currentConfig.MaxParallelSends); i++)
+        {
+            _senderTasks.Add(Task.Run(() => SenderLoopAsync(_sendChannel.Reader, stoppingToken), stoppingToken));
+        }
 
         // Start centralized debounce scheduler
         _debounceSchedulerTask = Task.Run(() => DebounceSchedulerLoop(stoppingToken), stoppingToken);
@@ -192,18 +216,26 @@ public partial class Worker : BackgroundService
         if (e.ChangeType is not (WatcherChangeTypes.Created or WatcherChangeTypes.Changed or WatcherChangeTypes.Renamed))
             return;
 
+        string path = e.FullPath;
+        string? oldPath = null;
+        if (e is RenamedEventArgs renamed)
+        {
+            oldPath = renamed.OldFullPath;
+            _logger.LogDebug("File renamed: {OldPath} -> {NewPath}", oldPath, path);
+        }
+
         // Exclude files in the processed folder to prevent infinite loops
-        var pathParts = e.FullPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var pathParts = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (pathParts.Any(part => part.Equals(_currentConfig.ProcessedFolder, StringComparison.OrdinalIgnoreCase)))
         {
-            _ignoredFileInProcessed(_logger, e.FullPath, null);
+            _ignoredFileInProcessed(_logger, path, null);
             return;
         }
 
         // Apply file extension filtering
         if (_currentConfig.AllowedExtensions.Length > 0)
         {
-            var extension = Path.GetExtension(e.FullPath);
+            var extension = Path.GetExtension(path);
             if (!_currentConfig.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
             {
                 return;
@@ -213,25 +245,35 @@ public partial class Worker : BackgroundService
         // Apply exclude pattern filtering
         if (_currentConfig.ExcludePatterns.Length > 0)
         {
-            var fileName = Path.GetFileName(e.FullPath);
-            foreach (var pattern in _currentConfig.ExcludePatterns)
+            var fileName = Path.GetFileName(path);
+
+            // Use optimized pattern matcher with caching (single pass)
+            var matchedPattern = WildcardPatternCache.TryMatchAny(fileName, _currentConfig.ExcludePatterns);
+            if (matchedPattern is not null)
             {
-                if (MatchesPattern(fileName, pattern))
+                if (_logger.IsEnabled(LogLevel.Information))
                 {
-                    return;
+                    _excludedByPattern(_logger, fileName, matchedPattern, null);
                 }
+                return;
+            }
+
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("File '{FileName}' was NOT excluded by any pattern. Patterns checked: {Patterns}",
+                    fileName, string.Join(", ", _currentConfig.ExcludePatterns));
             }
         }
 
         // Schedule debounced enqueue for this path
-        ScheduleEnqueueAfterDebounce(e.FullPath, _currentConfig.DebounceMilliseconds);
+        ScheduleEnqueueAfterDebounce(path, _currentConfig.DebounceMilliseconds);
 
-        _queuedDebouncedTrace(_logger, e.FullPath, null);
+        _queuedDebouncedTrace(_logger, path, null);
 
         // Fast-path for zero debounce - short-circuit scheduling and try to write immediately
         if (_currentConfig.DebounceMilliseconds <= 0 && _sendChannel is not null)
         {
-            _sendChannel.Writer.TryWrite(e.FullPath);
+            _sendChannel.Writer.TryWrite(path);
         }
     }
 
@@ -472,74 +514,74 @@ public partial class Worker : BackgroundService
         using var fileClient = _httpClientFactory.CreateClient("fileApi");
 
         // Prepare a factory to create a fresh HttpRequestMessage for each attempt so streaming content is created per attempt.
-    Func<CancellationToken, Task<HttpRequestMessage>> requestFactory = ct =>
-        {
-            // Decide sending strategy: use streaming upload when appropriate
-            if (ShouldUseStreamingUpload(notification))
+        Func<CancellationToken, Task<HttpRequestMessage>> requestFactory = ct =>
             {
-                var metadataObj = new UploadMetadata
+                // Decide sending strategy: use streaming upload when appropriate
+                if (ShouldUseStreamingUpload(notification))
                 {
-                    Path = notification.Path,
-                    FileSize = notification.FileSize,
-                    LastWriteTime = notification.LastWriteTime
-                };
+                    var metadataObj = new UploadMetadata
+                    {
+                        Path = notification.Path,
+                        FileSize = notification.FileSize,
+                        LastWriteTime = notification.LastWriteTime
+                    };
 
-                var multipart = new MultipartFormDataContent();
-                var metadataJson = JsonSerializer.Serialize(metadataObj, MyJsonContext.Default.UploadMetadata);
-                var metadataContent = new StringContent(metadataJson, Encoding.UTF8);
-                metadataContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-                multipart.Add(metadataContent, "metadata");
+                    var multipart = new MultipartFormDataContent();
+                    var metadataJson = JsonSerializer.Serialize(metadataObj, MyJsonContext.Default.UploadMetadata);
+                    var metadataContent = new StringContent(metadataJson, Encoding.UTF8);
+                    metadataContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                    multipart.Add(metadataContent, "metadata");
 
-                // Open file stream for streaming upload (stream will be disposed when HttpRequestMessage is disposed by the resilience service)
-                var fs = File.Open(notification.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                var streamContent = new StreamContent(fs);
-                streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-                multipart.Add(streamContent, "file", Path.GetFileName(notification.Path));
+                    // Open file stream for streaming upload (stream will be disposed when HttpRequestMessage is disposed by the resilience service)
+                    var fs = File.Open(notification.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    var streamContent = new StreamContent(fs);
+                    streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                    multipart.Add(streamContent, "file", Path.GetFileName(notification.Path));
 
-                var reqMsg = new HttpRequestMessage(HttpMethod.Post, _currentConfig.ApiEndpoint) { Content = multipart };
-                if (!string.IsNullOrWhiteSpace(_currentConfig.BearerToken))
-                {
-                    var token = _currentConfig.BearerToken;
-                    if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) token = token[7..].Trim();
-                    reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                    _attachingAuthDebug(_logger, _currentConfig.ApiEndpoint ?? string.Empty, token, null);
+                    var reqMsg = new HttpRequestMessage(HttpMethod.Post, _currentConfig.ApiEndpoint) { Content = multipart };
+                    if (!string.IsNullOrWhiteSpace(_currentConfig.BearerToken))
+                    {
+                        var token = _currentConfig.BearerToken;
+                        if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) token = token[7..].Trim();
+                        reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                        _attachingAuthDebug(_logger, _currentConfig.ApiEndpoint ?? string.Empty, token, null);
+                    }
+                    // Add a short-lived correlation id to help trace the request across logs and diagnostics
+                    var requestId = Guid.NewGuid().ToString("N");
+                    if (!reqMsg.Headers.Contains("X-Request-Id")) reqMsg.Headers.Add("X-Request-Id", requestId);
+                    _requestCorrelationDebug(_logger, requestId, notification.Path, null);
+                    return Task.FromResult(reqMsg);
                 }
-                // Add a short-lived correlation id to help trace the request across logs and diagnostics
-                var requestId = Guid.NewGuid().ToString("N");
-                if (!reqMsg.Headers.Contains("X-Request-Id")) reqMsg.Headers.Add("X-Request-Id", requestId);
-                _requestCorrelationDebug(_logger, requestId, notification.Path, null);
-                return Task.FromResult(reqMsg);
-            }
-            else
-            {
-                var bytes = JsonSerializer.SerializeToUtf8Bytes(notification, MyJsonContext.Default.FileNotification);
-                var ms = new MemoryStream(bytes, writable: false);
-                var content = new StreamContent(ms);
-                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-                var reqMsg = new HttpRequestMessage(HttpMethod.Post, _currentConfig.ApiEndpoint) { Content = content };
-                if (!string.IsNullOrWhiteSpace(_currentConfig.BearerToken))
+                else
                 {
-                    var token = _currentConfig.BearerToken;
-                    if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) token = token[7..].Trim();
-                    reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                    _attachingAuthDebug(_logger, _currentConfig.ApiEndpoint ?? string.Empty, token, null);
+                    var bytes = JsonSerializer.SerializeToUtf8Bytes(notification, MyJsonContext.Default.FileNotification);
+                    var ms = new MemoryStream(bytes, writable: false);
+                    var content = new StreamContent(ms);
+                    content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                    var reqMsg = new HttpRequestMessage(HttpMethod.Post, _currentConfig.ApiEndpoint) { Content = content };
+                    if (!string.IsNullOrWhiteSpace(_currentConfig.BearerToken))
+                    {
+                        var token = _currentConfig.BearerToken;
+                        if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) token = token[7..].Trim();
+                        reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                        _attachingAuthDebug(_logger, _currentConfig.ApiEndpoint ?? string.Empty, token, null);
+                    }
+                    // Correlate request with a unique id for tracing
+                    var requestId = Guid.NewGuid().ToString("N");
+                    if (!reqMsg.Headers.Contains("X-Request-Id")) reqMsg.Headers.Add("X-Request-Id", requestId);
+                    _requestCorrelationDebug(_logger, requestId, notification.Path, null);
+                    return Task.FromResult(reqMsg);
                 }
-                // Correlate request with a unique id for tracing
-                var requestId = Guid.NewGuid().ToString("N");
-                if (!reqMsg.Headers.Contains("X-Request-Id")) reqMsg.Headers.Add("X-Request-Id", requestId);
-                _requestCorrelationDebug(_logger, requestId, notification.Path, null);
-                return Task.FromResult(reqMsg);
-            }
-        };
+            };
 
-         var endpointKey = string.IsNullOrWhiteSpace(_currentConfig.ApiEndpoint) ? string.Empty : _currentConfig.ApiEndpoint;
+        var endpointKey = string.IsNullOrWhiteSpace(_currentConfig.ApiEndpoint) ? string.Empty : _currentConfig.ApiEndpoint;
 
-         var result = await _resilienceService.SendWithRetriesAsync(requestFactory, fileClient, endpointKey, _currentConfig, ct);
+        var result = await _resilienceService.SendWithRetriesAsync(requestFactory, fileClient, endpointKey, _currentConfig, ct);
 
-         // Diagnostics and logging for this file are recorded here using the worker's notification path
-         _diagnostics.RecordFileEvent(notification.Path, result.Success, result.LastStatusCode);
+        // Diagnostics and logging for this file are recorded here using the worker's notification path
+        _diagnostics.RecordFileEvent(notification.Path, result.Success, result.LastStatusCode);
 
-         if (result.ShortCircuited)
+        if (result.ShortCircuited)
         {
             _circuitOpenSkipWarning(_logger, endpointKey ?? string.Empty, notification.Path, null);
             return false;
@@ -551,9 +593,30 @@ public partial class Worker : BackgroundService
             return true;
         }
 
+        // Log specific error details
+        if (result.LastStatusCode.HasValue && result.LastStatusCode.Value >= 400)
+        {
+            var reasonPhrase = result.LastException is HttpRequestException httpEx && httpEx.StatusCode.HasValue
+                ? httpEx.StatusCode.Value.ToString()
+                : result.LastStatusCode.Value.ToString();
+            _httpErrorResponse(_logger, notification.Path, result.LastStatusCode.Value, reasonPhrase, null);
+        }
+
         if (result.LastException is not null)
         {
-            _failedPostError(_logger, notification.Path, result.Attempts, result.LastException);
+            // Categorize exception types for better diagnostics
+            if (result.LastException is TimeoutException or TaskCanceledException)
+            {
+                _httpTimeoutException(_logger, notification.Path, result.LastException);
+            }
+            else if (result.LastException is HttpRequestException)
+            {
+                _httpRequestException(_logger, notification.Path, result.LastException);
+            }
+            else
+            {
+                _failedPostError(_logger, notification.Path, result.Attempts, result.LastException);
+            }
         }
 
         return false;
@@ -670,47 +733,39 @@ public partial class Worker : BackgroundService
         _diagnostics.Dispose();
     }
 
-    /// <summary>
-    /// Check if a filename matches a wildcard pattern.
-    /// Supports * (any characters) and ? (single character) wildcards.
-    /// </summary>
-    internal static bool MatchesPattern(string fileName, string pattern)
-    {
-        if (string.IsNullOrEmpty(pattern))
-            return false;
-
-        // Convert wildcard pattern to regex
-        // Escape regex special characters except * and ?
-        var regexPattern = "^" + Regex.Escape(pattern)
-            .Replace("\\*", ".*")
-            .Replace("\\?", ".") + "$";
-
-        return Regex.IsMatch(fileName, regexPattern, RegexOptions.IgnoreCase);
-    }
-
     private void ConfigureLogging(string? logLevelString)
     {
-        // If null, treat as Information
-        logLevelString ??= "Information";
+        // If null, treat as Trace (show everything)
+        logLevelString ??= "Trace";
         try
         {
             if (Enum.TryParse<LogLevel>(logLevelString, true, out var configuredLevel))
             {
                 _loggingConfiguredInfo(_logger, configuredLevel, null);
-
-                // Store the configured level for conditional logging checks
                 _configuredLogLevel = configuredLevel;
+
+                // Check if the effective minimum log level is higher than requested
+                var effectiveLevel = _logger.IsEnabled(LogLevel.Trace) ? LogLevel.Trace :
+                                    _logger.IsEnabled(LogLevel.Debug) ? LogLevel.Debug :
+                                    _logger.IsEnabled(LogLevel.Information) ? LogLevel.Information :
+                                    _logger.IsEnabled(LogLevel.Warning) ? LogLevel.Warning :
+                                    _logger.IsEnabled(LogLevel.Error) ? LogLevel.Error :
+                                    _logger.IsEnabled(LogLevel.Critical) ? LogLevel.Critical : LogLevel.None;
+                if (effectiveLevel > configuredLevel)
+                {
+                    _logger.LogWarning("Requested log level {RequestedLevel}, but effective log level is {EffectiveLevel}. Check your logger configuration (e.g., appsettings.json).", configuredLevel, effectiveLevel);
+                }
             }
             else
             {
                 _invalidLogLevelWarning(_logger, logLevelString, null);
-                _configuredLogLevel = LogLevel.Information;
+                _configuredLogLevel = LogLevel.Trace;
             }
         }
         catch (Exception ex)
         {
             _failedConfigureLoggingWarning(_logger, logLevelString, ex);
-            _configuredLogLevel = LogLevel.Information;
+            _configuredLogLevel = LogLevel.Trace;
         }
     }
 
@@ -768,17 +823,17 @@ public partial class Worker : BackgroundService
                         if (_currentConfig.ExcludePatterns.Length > 0)
                         {
                             var fileName = Path.GetFileName(filePath);
-                            bool excluded = false;
-                            foreach (var pattern in _currentConfig.ExcludePatterns)
+
+                            // Use optimized pattern matcher (single pass)
+                            var matchedPattern = WildcardPatternCache.TryMatchAny(fileName, _currentConfig.ExcludePatterns);
+                            if (matchedPattern is not null)
                             {
-                                if (MatchesPattern(fileName, pattern))
+                                if (_logger.IsEnabled(LogLevel.Information))
                                 {
-                                    excluded = true;
-                                    break;
+                                    _excludedByPattern(_logger, fileName, matchedPattern, null);
                                 }
-                            }
-                            if (excluded)
                                 continue;
+                            }
                         }
 
                         // Schedule debounced enqueue for every existing file

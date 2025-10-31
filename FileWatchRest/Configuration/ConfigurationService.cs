@@ -5,6 +5,12 @@
 /// </summary>
 public class ConfigurationService : IDisposable
 {
+    /// <summary>
+    /// Gets the path to the configuration file.
+    /// </summary>
+    public string ConfigFilePath => _configFilePath;
+    private static readonly Action<ILogger<ConfigurationService>, string, Exception?> _loadedExcludePatterns =
+    LoggerMessage.Define<string>(LogLevel.Information, new EventId(101, "LoadedExcludePatterns"), "Loaded exclude patterns: {Patterns}");
     private static readonly Action<ILogger<ConfigurationService>, string, Exception?> _configFileNotFound =
         LoggerMessage.Define<string>(LogLevel.Information, new EventId(1, "ConfigFileNotFound"), "Configuration file not found at {Path}, creating default configuration");
     private static readonly Action<ILogger<ConfigurationService>, string, Exception?> _migratedLoggingSettings =
@@ -84,7 +90,6 @@ public class ConfigurationService : IDisposable
             try
             {
                 doc = JsonDocument.Parse(json);
-                // Detect whether the incoming JSON explicitly provided a diagnostics token
                 hadDiagnosticsTokenPropertyInJson = doc.RootElement.TryGetProperty("DiagnosticsBearerToken", out var _);
             }
             catch
@@ -96,6 +101,10 @@ public class ConfigurationService : IDisposable
             try
             {
                 config = JsonSerializer.Deserialize(json, MyJsonContext.Default.ExternalConfiguration);
+                if (config is not null && config.ExcludePatterns is { Length: > 0 })
+                {
+                    _loadedExcludePatterns(_logger, string.Join(", ", config.ExcludePatterns), null);
+                }
             }
             catch
             {
@@ -125,6 +134,16 @@ public class ConfigurationService : IDisposable
                             var exts = new List<string>();
                             foreach (var it in extElem.EnumerateArray()) if (it.ValueKind == JsonValueKind.String) exts.Add(it.GetString()!);
                             manual.AllowedExtensions = exts.ToArray();
+                        }
+                        if (doc.RootElement.TryGetProperty("ExcludePatterns", out var excludeElem) && excludeElem.ValueKind == JsonValueKind.Array)
+                        {
+                            var excludes = new List<string>();
+                            foreach (var it in excludeElem.EnumerateArray()) if (it.ValueKind == JsonValueKind.String) excludes.Add(it.GetString()!);
+                            manual.ExcludePatterns = excludes.ToArray();
+                            if (manual.ExcludePatterns is { Length: > 0 })
+                            {
+                                _loadedExcludePatterns(_logger, string.Join(", ", manual.ExcludePatterns), null);
+                            }
                         }
                         if (doc.RootElement.TryGetProperty("IncludeSubdirectories", out var inc) && inc.ValueKind == JsonValueKind.True || inc.ValueKind == JsonValueKind.False)
                             manual.IncludeSubdirectories = inc.GetBoolean();
@@ -299,6 +318,7 @@ public class ConfigurationService : IDisposable
                             ProcessedFolder = config.ProcessedFolder,
                             MoveProcessedFiles = config.MoveProcessedFiles,
                             AllowedExtensions = config.AllowedExtensions,
+                            ExcludePatterns = config.ExcludePatterns,
                             IncludeSubdirectories = config.IncludeSubdirectories,
                             DebounceMilliseconds = config.DebounceMilliseconds,
                             Retries = config.Retries,
@@ -515,9 +535,10 @@ public class ConfigurationService : IDisposable
 
     private async Task CreateDefaultConfigurationAsync(CancellationToken cancellationToken)
     {
+
+        // Only include properties that are present in the current ExternalConfiguration schema
         var defaultConfig = new ExternalConfiguration
         {
-            // Core file watching settings
             Folders = new[] { @"C:\temp\watch" },
             ApiEndpoint = "http://localhost:8080/api/files",
             PostFileContents = false,
@@ -527,28 +548,21 @@ public class ConfigurationService : IDisposable
             ExcludePatterns = [],
             IncludeSubdirectories = true,
             DebounceMilliseconds = 1000,
-
-            // Performance and reliability settings
             Retries = 3,
             RetryDelayMilliseconds = 500,
             WatcherMaxRestartAttempts = 3,
-            DiscardZeroByteFiles = false,
             WatcherRestartDelayMilliseconds = 1000,
+            DiscardZeroByteFiles = false,
             DiagnosticsUrlPrefix = "http://localhost:5005/",
             ChannelCapacity = 1000,
             MaxParallelSends = 4,
             FileWatcherInternalBufferSize = 64 * 1024,
             WaitForFileReadyMilliseconds = 0,
-            MaxContentBytes = 5 * 1024 * 1024, // default 5 MB
-            // Streaming threshold for large files (stream when > threshold)
-            StreamingThresholdBytes = 256 * 1024, // 256 KB
-
-            // Circuit breaker default: disabled
+            MaxContentBytes = 5 * 1024 * 1024,
+            StreamingThresholdBytes = 256 * 1024,
             EnableCircuitBreaker = false,
             CircuitBreakerFailureThreshold = 5,
             CircuitBreakerOpenDurationMilliseconds = 30_000,
-
-            // Logging configuration - prefer canonical configuration fields; legacy file-specific flags are left to their defaults
             Logging = new LoggingOptions
             {
                 LogType = LogType.Csv,

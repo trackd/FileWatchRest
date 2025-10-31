@@ -19,17 +19,58 @@ public class ExcludePatternMatcherTests
     [InlineData("SAP_HelloWorld.log", new[] { "SAP_*.log" }, true)]
     public void ExcludePatternMatcher_Matches_Correctly(string fileName, string[] patterns, bool expected)
     {
-        // Arrange
-        bool excluded = false;
-        foreach (var pattern in patterns)
-        {
-            if (Worker.MatchesPattern(fileName, pattern))
-            {
-                excluded = true;
-                break;
-            }
-        }
+        // Arrange & Act
+        var excluded = WildcardPatternCache.MatchesAny(fileName, patterns);
+
         // Assert
         Assert.Equal(expected, excluded);
+    }
+
+    [Fact]
+    public void WildcardPatternMatcher_CaseInsensitive_Matches()
+    {
+        var matcher = new WildcardPatternMatcher("SAP_*");
+
+        Assert.True(matcher.IsMatch("SAP_file.txt"));
+        Assert.True(matcher.IsMatch("sap_file.txt"));
+        Assert.True(matcher.IsMatch("SaP_FiLe.TxT"));
+    }
+
+    [Fact]
+    public void WildcardPatternMatcher_SpecialRegexChars_Escaped()
+    {
+        var matcher = new WildcardPatternMatcher("file.txt");
+
+        Assert.True(matcher.IsMatch("file.txt"));
+        Assert.False(matcher.IsMatch("fileXtxt")); // Dot should not act as regex wildcard
+    }
+
+    [Fact]
+    public void WildcardPatternMatcher_Span_Matches()
+    {
+        var matcher = new WildcardPatternMatcher("*.log");
+        ReadOnlySpan<char> fileName = "debug.log".AsSpan();
+
+        Assert.True(matcher.IsMatch(fileName));
+    }
+
+    [Fact]
+    public void WildcardPatternCache_Caches_Patterns()
+    {
+        var pattern = "test_*";
+        var matcher1 = WildcardPatternCache.GetOrCreate(pattern);
+        var matcher2 = WildcardPatternCache.GetOrCreate(pattern);
+
+        Assert.Same(matcher1, matcher2);
+    }
+
+    [Theory]
+    [InlineData("*", true)]
+    [InlineData("?", true)]
+    [InlineData("[abc]", true)]
+    [InlineData("literal", false)]
+    public void ContainsWildcards_DetectsCorrectly(string pattern, bool expected)
+    {
+        Assert.Equal(expected, WildcardPatternMatcher.ContainsWildcards(pattern));
     }
 }
