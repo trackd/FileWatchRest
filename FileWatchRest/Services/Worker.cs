@@ -210,6 +210,19 @@ public partial class Worker : BackgroundService
             }
         }
 
+        // Apply exclude pattern filtering
+        if (_currentConfig.ExcludePatterns.Length > 0)
+        {
+            var fileName = Path.GetFileName(e.FullPath);
+            foreach (var pattern in _currentConfig.ExcludePatterns)
+            {
+                if (MatchesPattern(fileName, pattern))
+                {
+                    return;
+                }
+            }
+        }
+
         // Schedule debounced enqueue for this path
         ScheduleEnqueueAfterDebounce(e.FullPath, _currentConfig.DebounceMilliseconds);
 
@@ -657,6 +670,24 @@ public partial class Worker : BackgroundService
         _diagnostics.Dispose();
     }
 
+    /// <summary>
+    /// Check if a filename matches a wildcard pattern.
+    /// Supports * (any characters) and ? (single character) wildcards.
+    /// </summary>
+    private static bool MatchesPattern(string fileName, string pattern)
+    {
+        if (string.IsNullOrEmpty(pattern))
+            return false;
+
+        // Convert wildcard pattern to regex
+        // Escape regex special characters except * and ?
+        var regexPattern = "^" + Regex.Escape(pattern)
+            .Replace("\\*", ".*")
+            .Replace("\\?", ".") + "$";
+
+        return Regex.IsMatch(fileName, regexPattern, RegexOptions.IgnoreCase);
+    }
+
     private void ConfigureLogging(string? logLevelString)
     {
         // If null, treat as Information
@@ -733,6 +764,23 @@ public partial class Worker : BackgroundService
                                 continue;
                         }
 
+                        // Exclude pattern filtering
+                        if (_currentConfig.ExcludePatterns.Length > 0)
+                        {
+                            var fileName = Path.GetFileName(filePath);
+                            bool excluded = false;
+                            foreach (var pattern in _currentConfig.ExcludePatterns)
+                            {
+                                if (MatchesPattern(fileName, pattern))
+                                {
+                                    excluded = true;
+                                    break;
+                                }
+                            }
+                            if (excluded)
+                                continue;
+                        }
+
                         // Schedule debounced enqueue for every existing file
                         ScheduleEnqueueAfterDebounce(filePath, _currentConfig.DebounceMilliseconds);
 
@@ -768,5 +816,57 @@ public partial class Worker : BackgroundService
         }
 
         return Task.CompletedTask;
+    }
+    /// <summary>
+    /// Checks if the given fileName matches any of the exclude patterns (supports * and ? wildcards).
+    /// </summary>
+    /// <param name="fileName">The file name to check.</param>
+    /// <param name="excludePatterns">A list of wildcard patterns to match against.</param>
+    /// <returns>True if the fileName matches any pattern; otherwise, false.</returns>
+    public static bool MatchesExcludePattern(string fileName, List<string>? excludePatterns)
+    {
+        if (excludePatterns is null || excludePatterns.Count == 0)
+            return false;
+        foreach (var pattern in excludePatterns)
+        {
+            if (string.IsNullOrWhiteSpace(pattern))
+                continue;
+            if (WildcardMatch(fileName, pattern))
+                return true;
+        }
+        return false;
+    }
+
+    // Simple wildcard matcher supporting * and ?
+    private static bool WildcardMatch(string input, string pattern)
+    {
+        if (pattern == "*") return true;
+        int i = 0, j = 0, starIdx = -1, match = 0;
+        while (i < input.Length)
+        {
+            if (j < pattern.Length && (pattern[j] == '?' || char.ToLowerInvariant(pattern[j]) == char.ToLowerInvariant(input[i])))
+            {
+                i++; j++;
+            }
+            else if (j < pattern.Length && pattern[j] == '*')
+            {
+                starIdx = j;
+                match = i;
+                j++;
+            }
+            else if (starIdx != -1)
+            {
+                j = starIdx + 1;
+                match++;
+                i = match;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        while (j < pattern.Length && pattern[j] == '*')
+            j++;
+        return j == pattern.Length;
     }
 }

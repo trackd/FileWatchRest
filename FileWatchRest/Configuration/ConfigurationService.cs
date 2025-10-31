@@ -139,7 +139,7 @@ public class ConfigurationService : IDisposable
                         if (doc.RootElement.TryGetProperty("WaitForFileReadyMilliseconds", out var wf) && wf.ValueKind == JsonValueKind.Number && wf.TryGetInt32(out var wfv)) manual.WaitForFileReadyMilliseconds = wfv;
                         if (doc.RootElement.TryGetProperty("MaxContentBytes", out var mcb) && mcb.ValueKind == JsonValueKind.Number && mcb.TryGetInt64(out var mcbv)) manual.MaxContentBytes = mcbv;
                         if (doc.RootElement.TryGetProperty("StreamingThresholdBytes", out var stb) && stb.ValueKind == JsonValueKind.Number && stb.TryGetInt64(out var stbv)) manual.StreamingThresholdBytes = stbv;
-                            if (doc.RootElement.TryGetProperty("DiscardZeroByteFiles", out var dz) && (dz.ValueKind == JsonValueKind.True || dz.ValueKind == JsonValueKind.False)) manual.DiscardZeroByteFiles = dz.GetBoolean();
+                        if (doc.RootElement.TryGetProperty("DiscardZeroByteFiles", out var dz) && (dz.ValueKind == JsonValueKind.True || dz.ValueKind == JsonValueKind.False)) manual.DiscardZeroByteFiles = dz.GetBoolean();
                         if (doc.RootElement.TryGetProperty("EnableCircuitBreaker", out var ecb) && (ecb.ValueKind == JsonValueKind.True || ecb.ValueKind == JsonValueKind.False)) manual.EnableCircuitBreaker = ecb.GetBoolean();
                         if (doc.RootElement.TryGetProperty("CircuitBreakerFailureThreshold", out var cbft) && cbft.ValueKind == JsonValueKind.Number && cbft.TryGetInt32(out var cbftv)) manual.CircuitBreakerFailureThreshold = cbftv;
                         if (doc.RootElement.TryGetProperty("CircuitBreakerOpenDurationMilliseconds", out var co) && co.ValueKind == JsonValueKind.Number && co.TryGetInt32(out var cov)) manual.CircuitBreakerOpenDurationMilliseconds = cov;
@@ -256,21 +256,21 @@ public class ConfigurationService : IDisposable
                         return _currentConfig;
                     }
                 }
-                 var validationResult = ExternalConfigurationValidator.Validate(config);
-                 if (!validationResult.IsValid)
-                 {
-                     _loadedConfigurationInvalid(_logger, string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)), null);
-                     lock (_configLock)
-                     {
-                         _currentConfig = new ExternalConfiguration();
-                         return _currentConfig;
-                     }
-                 }
-             }
-             catch (Exception ex)
-             {
-                 _configValidationWarning(_logger, ex);
-             }
+                var validationResult = ExternalConfigurationValidator.Validate(config);
+                if (!validationResult.IsValid)
+                {
+                    _loadedConfigurationInvalid(_logger, string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)), null);
+                    lock (_configLock)
+                    {
+                        _currentConfig = new ExternalConfiguration();
+                        return _currentConfig;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _configValidationWarning(_logger, ex);
+            }
             // Decrypt/encrypt any bearer tokens (API and Diagnostics) as needed
             if (config is not null)
             {
@@ -388,13 +388,13 @@ public class ConfigurationService : IDisposable
                     if (!finalResult.IsValid)
                     {
                         _loadedConfigurationInvalid(_logger, string.Join("; ", finalResult.Errors.Select(e => e.ErrorMessage)), null);
-                     }
+                    }
                 }
                 catch (Exception ex)
                 {
                     _configValidationWarning(_logger, ex);
                 }
-             }
+            }
 
             lock (_configLock)
             {
@@ -405,13 +405,13 @@ public class ConfigurationService : IDisposable
         catch (Exception ex)
         {
             _failedToLoad(_logger, _configFilePath, ex);
-             lock (_configLock)
-             {
-                 _currentConfig = new ExternalConfiguration();
-                 return _currentConfig;
-             }
-         }
-     }
+            lock (_configLock)
+            {
+                _currentConfig = new ExternalConfiguration();
+                return _currentConfig;
+            }
+        }
+    }
 
     public async Task SaveConfigurationAsync(ExternalConfiguration config, CancellationToken cancellationToken = default)
     {
@@ -445,7 +445,7 @@ public class ConfigurationService : IDisposable
                 FileWatcherInternalBufferSize = config.FileWatcherInternalBufferSize,
                 WaitForFileReadyMilliseconds = config.WaitForFileReadyMilliseconds,
                 Logging = config.Logging
-             };
+            };
 
             var json = JsonSerializer.Serialize(saveConfig, MyJsonContext.Default.ExternalConfiguration);
             await File.WriteAllTextAsync(_configFilePath, json, cancellationToken);
@@ -460,9 +460,9 @@ public class ConfigurationService : IDisposable
         catch (Exception ex)
         {
             _failedToSave(_logger, _configFilePath, ex);
-             throw;
-         }
-     }
+            throw;
+        }
+    }
 
     public void StartWatching(Func<ExternalConfiguration, Task> onConfigChanged)
     {
@@ -523,7 +523,8 @@ public class ConfigurationService : IDisposable
             PostFileContents = false,
             MoveProcessedFiles = false,
             ProcessedFolder = "processed",
-            AllowedExtensions = new[] { ".txt", ".json", ".xml" },
+            AllowedExtensions = [".txt", ".json", ".xml"],
+            ExcludePatterns = [],
             IncludeSubdirectories = true,
             DebounceMilliseconds = 1000,
 

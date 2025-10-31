@@ -20,6 +20,14 @@ public class ExternalConfiguration
     public string ProcessedFolder { get; set; } = "processed";
     public bool MoveProcessedFiles { get; set; }
     public string[] AllowedExtensions { get; set; } = [];
+
+    /// <summary>
+    /// Patterns for excluding files from processing. Supports wildcard matching.
+    /// Examples: "SAP_*" (starts with SAP_), "*_temp" (ends with _temp), "*backup*" (contains backup).
+    /// Files matching any exclude pattern will be ignored even if they pass extension filtering.
+    /// </summary>
+    public string[] ExcludePatterns { get; set; } = [];
+
     public bool IncludeSubdirectories { get; set; } = true;
     public int DebounceMilliseconds { get; set; } = 1000;
 

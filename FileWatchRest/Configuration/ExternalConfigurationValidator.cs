@@ -69,6 +69,9 @@ public sealed class ExternalConfigurationValidator
             }
         }
 
+        if (config.ExcludePatterns is null)
+            errors.Add(new ValidationFailure(nameof(config.ExcludePatterns), "ExcludePatterns must be present"));
+
         var allowedLevels = new[] { "Trace", "Debug", "Information", "Warning", "Error", "Critical", "None" };
         var configuredLog = config.Logging?.LogLevel ?? string.Empty;
         if (!allowedLevels.Contains(configuredLog))

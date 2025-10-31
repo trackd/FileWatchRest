@@ -104,6 +104,7 @@ Configuration Options
 - `MoveProcessedFiles`: If true, moves files to processed folder after successful POST
 - `ProcessedFolder`: Name of subfolder to move processed files to (default: "processed"). Files in this folder are automatically excluded from monitoring to prevent infinite loops.
 - `AllowedExtensions`: Array of file extensions to watch (empty = all files)
+- `ExcludePatterns`: Array of filename patterns to exclude from processing. Supports wildcard matching with `*` (any characters) and `?` (single character). Examples: `"Backup_*"` (starts with Backup\_), `"*_temp"` (ends with \_temp), `"*.bak"` (backup files). Files matching any exclude pattern are ignored even if they pass extension filtering.
 - `IncludeSubdirectories`: Whether to watch subfolders
 - `DebounceMilliseconds`: Wait time to debounce file events
 
