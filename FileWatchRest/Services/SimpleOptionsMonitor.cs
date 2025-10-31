@@ -1,7 +1,14 @@
 ﻿namespace FileWatchRest.Services;
 
 /// <summary>
-/// A tiny, test-friendly IOptionsMonitor implementation which holds a single value and allows manual change notifications.
+/// Test helper for IOptionsMonitor - provides a simple implementation for unit testing.
+///
+/// Use this in tests to:
+/// - Inject test configuration values without complex DI setup
+/// - Manually trigger configuration changes via Raise()
+/// - Verify that components properly respond to configuration updates
+///
+/// Production code uses ExternalConfigurationOptionsMonitor instead.
 /// </summary>
 public class SimpleOptionsMonitor<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T> : IOptionsMonitor<T>
 {

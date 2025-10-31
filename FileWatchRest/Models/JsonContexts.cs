@@ -23,11 +23,12 @@ public class ErrorResponse
     public string[] AvailableEndpoints { get; set; } = [];
 }
 
-[JsonSourceGenerationOptions(WriteIndented = false)]
+[JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(UploadMetadata))]
 [JsonSerializable(typeof(FileNotification))]
 [JsonSerializable(typeof(ExternalConfiguration))]
 [JsonSerializable(typeof(LoggingOptions))]
+[JsonSerializable(typeof(LogType))]
 [JsonSerializable(typeof(LogWriteEntry))]
 [JsonSerializable(typeof(CircuitStateInfo))]
 [JsonSerializable(typeof(Dictionary<string, CircuitStateInfo>))]

@@ -10,7 +10,7 @@ public partial class Worker : BackgroundService
     private static readonly Action<ILogger<Worker>, string, Exception?> _configFilePathLoaded =
         LoggerMessage.Define<string>(LogLevel.Information, new EventId(104, "ConfigFilePathLoaded"), "Loaded configuration file: {ConfigPath}");
     private static readonly Action<ILogger<Worker>, string, string, Exception?> _excludedByPattern =
-        LoggerMessage.Define<string, string>(LogLevel.Information, new EventId(102, "ExcludedByPattern"), "File {FileName} excluded by pattern {Pattern}");
+        LoggerMessage.Define<string, string>(LogLevel.Debug, new EventId(102, "ExcludedByPattern"), "File {FileName} excluded by pattern {Pattern}");
     private static readonly Action<ILogger<Worker>, Exception?> _noFoldersConfigured =
         LoggerMessage.Define(LogLevel.Warning, new EventId(2, "NoFoldersConfigured"), "No folders configured to watch. Update the configuration file in AppData.");
     private static readonly Action<ILogger<Worker>, string, Exception?> _watcherFailedStopping =
@@ -78,7 +78,7 @@ public partial class Worker : BackgroundService
     private static readonly Action<ILogger<Worker>, string, Exception?> _watcherErrorWarning =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(33, "WatcherErrorWorker"), "FileSystemWatcher error for folder {Folder}");
     private static readonly Action<ILogger<Worker>, string, int, Exception?> _waitingForFileReady =
-        LoggerMessage.Define<string, int>(LogLevel.Debug, new EventId(35, "WaitingForFileReady"), "Waiting up to {WaitMs}ms for file {Path} to become ready and non-empty");
+        LoggerMessage.Define<string, int>(LogLevel.Debug, new EventId(35, "WaitingForFileReady"), "Waiting for file {Path} (up to {WaitMs}ms) to become ready and non-empty");
     private static readonly Action<ILogger<Worker>, string, int, Exception?> _fileStillEmptyWarning =
         LoggerMessage.Define<string, int>(LogLevel.Warning, new EventId(36, "FileStillEmpty"), "File {Path} remained empty after waiting {WaitMs}ms");
     private static readonly Action<ILogger<Worker>, string, Exception?> _skippingZeroLengthFile =
@@ -201,10 +201,7 @@ public partial class Worker : BackgroundService
         return _fileWatcherManager.StartWatchingAsync(folders, _currentConfig, OnFileChanged, OnWatcherError, folder =>
         {
             // Exceeded restart attempts -> stop application
-            if (_logger.IsEnabled(LogLevel.Error))
-            {
-                _watcherFailedStopping(_logger, folder, null);
-            }
+            _watcherFailedStopping(_logger, folder, null);
             _lifetime.StopApplication();
         });
     }
@@ -214,9 +211,7 @@ public partial class Worker : BackgroundService
         // Accept Created, Changed, and Renamed events
         // Renamed events occur when files are moved into the watched folder
         if (e.ChangeType is not (WatcherChangeTypes.Created or WatcherChangeTypes.Changed or WatcherChangeTypes.Renamed))
-            return;
-
-        string path = e.FullPath;
+            return;        string path = e.FullPath;
         string? oldPath = null;
         if (e is RenamedEventArgs renamed)
         {
@@ -247,22 +242,18 @@ public partial class Worker : BackgroundService
         {
             var fileName = Path.GetFileName(path);
 
+            _logger.LogTrace("Checking file '{FileName}' against {Count} exclude patterns", fileName, _currentConfig.ExcludePatterns.Length);
+
             // Use optimized pattern matcher with caching (single pass)
             var matchedPattern = WildcardPatternCache.TryMatchAny(fileName, _currentConfig.ExcludePatterns);
             if (matchedPattern is not null)
             {
-                if (_logger.IsEnabled(LogLevel.Information))
-                {
-                    _excludedByPattern(_logger, fileName, matchedPattern, null);
-                }
+                _logger.LogDebug("File {FileName} excluded by pattern {Pattern}", fileName, matchedPattern);
                 return;
             }
 
-            if (_logger.IsEnabled(LogLevel.Debug))
-            {
-                _logger.LogDebug("File '{FileName}' was NOT excluded by any pattern. Patterns checked: {Patterns}",
-                    fileName, string.Join(", ", _currentConfig.ExcludePatterns));
-            }
+            _logger.LogDebug("File '{FileName}' was NOT excluded by any pattern. Patterns checked: {Patterns}",
+                fileName, string.Join(", ", _currentConfig.ExcludePatterns));
         }
 
         // Schedule debounced enqueue for this path
@@ -331,7 +322,7 @@ public partial class Worker : BackgroundService
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
                 catch (Exception ex)
                 {
-                    if (_logger.IsEnabled(LogLevel.Warning)) _failedSchedulingDebounce(_logger, "<scheduler>", ex);
+                    _failedSchedulingDebounce(_logger, "<scheduler>", ex);
                     await Task.Delay(1000, ct);
                 }
             }
@@ -382,7 +373,7 @@ public partial class Worker : BackgroundService
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var waited = false;
         var waitMs = Math.Max(0, _currentConfig.WaitForFileReadyMilliseconds);
-        if (_logger.IsEnabled(LogLevel.Debug)) _waitingForFileReady(_logger, path, waitMs, null);
+        _waitingForFileReady(_logger, path, waitMs, null);
 
         while (sw.ElapsedMilliseconds < waitMs)
         {
@@ -744,17 +735,8 @@ public partial class Worker : BackgroundService
                 _loggingConfiguredInfo(_logger, configuredLevel, null);
                 _configuredLogLevel = configuredLevel;
 
-                // Check if the effective minimum log level is higher than requested
-                var effectiveLevel = _logger.IsEnabled(LogLevel.Trace) ? LogLevel.Trace :
-                                    _logger.IsEnabled(LogLevel.Debug) ? LogLevel.Debug :
-                                    _logger.IsEnabled(LogLevel.Information) ? LogLevel.Information :
-                                    _logger.IsEnabled(LogLevel.Warning) ? LogLevel.Warning :
-                                    _logger.IsEnabled(LogLevel.Error) ? LogLevel.Error :
-                                    _logger.IsEnabled(LogLevel.Critical) ? LogLevel.Critical : LogLevel.None;
-                if (effectiveLevel > configuredLevel)
-                {
-                    _logger.LogWarning("Requested log level {RequestedLevel}, but effective log level is {EffectiveLevel}. Check your logger configuration (e.g., appsettings.json).", configuredLevel, effectiveLevel);
-                }
+                // Note: Effective log level is controlled by the CSV logger's LogLevel setting in the external configuration.
+                // The global minimum is set to Trace in Program.cs to allow the CSV logger to filter messages itself.
             }
             else
             {
@@ -806,6 +788,8 @@ public partial class Worker : BackgroundService
                         if (ct.IsCancellationRequested)
                             break;
 
+                        _logger.LogTrace("EnqueueExistingFiles found file: {FilePath}", filePath);
+
                         // Exclude processed folder
                         var pathParts = filePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                         if (pathParts.Any(part => part.Equals(_currentConfig.ProcessedFolder, StringComparison.OrdinalIgnoreCase)))
@@ -828,10 +812,7 @@ public partial class Worker : BackgroundService
                             var matchedPattern = WildcardPatternCache.TryMatchAny(fileName, _currentConfig.ExcludePatterns);
                             if (matchedPattern is not null)
                             {
-                                if (_logger.IsEnabled(LogLevel.Information))
-                                {
-                                    _excludedByPattern(_logger, fileName, matchedPattern, null);
-                                }
+                                _excludedByPattern(_logger, fileName, matchedPattern, null);
                                 continue;
                             }
                         }

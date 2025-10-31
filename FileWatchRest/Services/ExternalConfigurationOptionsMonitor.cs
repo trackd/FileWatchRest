@@ -1,8 +1,16 @@
 ﻿namespace FileWatchRest.Services;
 
 /// <summary>
-/// Wraps <see cref="ConfigurationService"/> and exposes the external configuration via <see cref="IOptionsMonitor{ExternalConfiguration}"/>.
-/// This class loads the initial value synchronously during construction and registers for file-change notifications so OnChange callbacks will be invoked.
+/// Adapter that bridges ConfigurationService with the standard .NET IOptionsMonitor pattern.
+///
+/// This allows the service to:
+/// - Use standard dependency injection for configuration
+/// - Integrate with .NET's options pattern (IOptionsMonitor)
+/// - Support custom config location (ProgramData) with file watching
+/// - Maintain security features (token encryption) outside standard IConfiguration
+///
+/// The adapter loads configuration synchronously during DI container construction
+/// and propagates file-change notifications to IOptionsMonitor subscribers.
 /// </summary>
 public class ExternalConfigurationOptionsMonitor : IOptionsMonitor<ExternalConfiguration>
 {

@@ -1,7 +1,20 @@
 ﻿namespace FileWatchRest.Configuration;
 
 /// <summary>
-/// Service responsible for managing external configuration stored in AppData
+/// Service responsible for managing external configuration stored in ProgramData.
+///
+/// Architecture:
+/// - Loads/saves JSON configuration from ProgramData\FileWatchRest\FileWatchRest.json
+/// - Automatically encrypts bearer tokens on Windows using DPAPI
+/// - Validates configuration on load
+/// - Provides file-watching capability for configuration changes
+/// - Integrates with IOptionsMonitor via ExternalConfigurationOptionsMonitor
+///
+/// The service handles:
+/// - Token encryption/decryption (Windows only)
+/// - Configuration migration from legacy formats
+/// - Default configuration creation
+/// - Change notification through file watcher
 /// </summary>
 public class ConfigurationService : IDisposable
 {
@@ -399,23 +412,6 @@ public class ConfigurationService : IDisposable
                 }
             }
 
-            // Final validation before accepting the loaded configuration (fallback to defaults on failure)
-            if (config is not null)
-            {
-                try
-                {
-                    var finalResult = ExternalConfigurationValidator.Validate(config);
-                    if (!finalResult.IsValid)
-                    {
-                        _loadedConfigurationInvalid(_logger, string.Join("; ", finalResult.Errors.Select(e => e.ErrorMessage)), null);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _configValidationWarning(_logger, ex);
-                }
-            }
-
             lock (_configLock)
             {
                 _currentConfig = config ?? new ExternalConfiguration();
@@ -592,10 +588,13 @@ public class ConfigurationService : IDisposable
         try
         {
             var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize(json, MyJsonContext.Default.ExternalConfiguration);
+            var config = JsonSerializer.Deserialize(json, MyJsonContext.Default.ExternalConfiguration);
+            return config;
         }
-        catch
+        catch (Exception ex)
         {
+            // Log to console for early startup diagnostics (before logging infrastructure is ready)
+            Console.WriteLine($"LoadFromFile failed for {path}: {ex.Message}");
             return null;
         }
     }

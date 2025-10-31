@@ -96,6 +96,7 @@ public class LoggingOptions
     public int RetainedFileCountLimit { get; set; } = 14;
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<LogType>))]
 public enum LogType
 {
     Csv,
