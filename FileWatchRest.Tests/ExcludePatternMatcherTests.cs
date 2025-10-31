@@ -1,8 +1,4 @@
-﻿using System.Collections.Generic;
-using Xunit;
-using FileWatchRest.Services;
-
-namespace FileWatchRest.Tests;
+﻿namespace FileWatchRest.Tests;
 
 public class ExcludePatternMatcherTests
 {
@@ -20,13 +16,20 @@ public class ExcludePatternMatcherTests
     [InlineData("file.txt", new string[0], false)]
     [InlineData("file.txt", new[] { "SAP_*", "*.txt" }, true)]
     [InlineData("file.csv", new[] { "SAP_*", "*.txt" }, false)]
+    [InlineData("SAP_HelloWorld.log", new[] { "SAP_*.log" }, true)]
     public void ExcludePatternMatcher_Matches_Correctly(string fileName, string[] patterns, bool expected)
     {
         // Arrange
-        var patternList = patterns == null ? null : new List<string>(patterns);
-        // Act
-        bool result = Worker.MatchesExcludePattern(fileName, patternList);
+        bool excluded = false;
+        foreach (var pattern in patterns)
+        {
+            if (Worker.MatchesPattern(fileName, pattern))
+            {
+                excluded = true;
+                break;
+            }
+        }
         // Assert
-        Assert.Equal(expected, result);
+        Assert.Equal(expected, excluded);
     }
 }

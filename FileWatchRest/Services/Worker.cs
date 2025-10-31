@@ -674,7 +674,7 @@ public partial class Worker : BackgroundService
     /// Check if a filename matches a wildcard pattern.
     /// Supports * (any characters) and ? (single character) wildcards.
     /// </summary>
-    private static bool MatchesPattern(string fileName, string pattern)
+    internal static bool MatchesPattern(string fileName, string pattern)
     {
         if (string.IsNullOrEmpty(pattern))
             return false;
@@ -816,57 +816,5 @@ public partial class Worker : BackgroundService
         }
 
         return Task.CompletedTask;
-    }
-    /// <summary>
-    /// Checks if the given fileName matches any of the exclude patterns (supports * and ? wildcards).
-    /// </summary>
-    /// <param name="fileName">The file name to check.</param>
-    /// <param name="excludePatterns">A list of wildcard patterns to match against.</param>
-    /// <returns>True if the fileName matches any pattern; otherwise, false.</returns>
-    public static bool MatchesExcludePattern(string fileName, List<string>? excludePatterns)
-    {
-        if (excludePatterns is null || excludePatterns.Count == 0)
-            return false;
-        foreach (var pattern in excludePatterns)
-        {
-            if (string.IsNullOrWhiteSpace(pattern))
-                continue;
-            if (WildcardMatch(fileName, pattern))
-                return true;
-        }
-        return false;
-    }
-
-    // Simple wildcard matcher supporting * and ?
-    private static bool WildcardMatch(string input, string pattern)
-    {
-        if (pattern == "*") return true;
-        int i = 0, j = 0, starIdx = -1, match = 0;
-        while (i < input.Length)
-        {
-            if (j < pattern.Length && (pattern[j] == '?' || char.ToLowerInvariant(pattern[j]) == char.ToLowerInvariant(input[i])))
-            {
-                i++; j++;
-            }
-            else if (j < pattern.Length && pattern[j] == '*')
-            {
-                starIdx = j;
-                match = i;
-                j++;
-            }
-            else if (starIdx != -1)
-            {
-                j = starIdx + 1;
-                match++;
-                i = match;
-            }
-            else
-            {
-                return false;
-            }
-        }
-        while (j < pattern.Length && pattern[j] == '*')
-            j++;
-        return j == pattern.Length;
     }
 }
