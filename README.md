@@ -65,6 +65,11 @@ Example configuration:
     ".xml",
     ".csv"
   ],
+  "ExcludePatterns": [
+    "Backup_*",
+    "*_temp*",
+    "*.bak"
+  ],
   "IncludeSubdirectories": true,
   "DebounceMilliseconds": 1000,
   "Retries": 3,
