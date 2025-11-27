@@ -1,28 +1,30 @@
-﻿namespace FileWatchRest.Tests;
+namespace FileWatchRest.Tests;
 
-public class WorkerHelperTests
-{
+public class WorkerHelperTests {
     [Fact]
-    public void ShouldUseStreamingUpload_BehavesAsExpected()
-    {
-        var factory = LoggerFactory.Create(b => b.AddDebug());
-        var workerLogger = factory.CreateLogger<Worker>();
-        var diagLogger = factory.CreateLogger<DiagnosticsService>();
-        var configLogger = factory.CreateLogger<ConfigurationService>();
-        var watcherLogger = factory.CreateLogger<FileWatcherManager>();
+    public void ShouldUseStreamingUploadBehavesAsExpected() {
+        ILoggerFactory factory = LoggerFactory.Create(b => b.AddDebug());
+        ILogger<Worker> workerLogger = factory.CreateLogger<Worker>();
+        ILogger<DiagnosticsService> diagLogger = factory.CreateLogger<DiagnosticsService>();
+        ILogger<FileWatcherManager> watcherLogger = factory.CreateLogger<FileWatcherManager>();
 
         var lifetime = new TestHostApplicationLifetime();
-        var diagnostics = new DiagnosticsService(diagLogger);
-        var configService = new ConfigurationService(configLogger, "FileWatchRest_Test_Helper");
+        var diagnostics = new DiagnosticsService(diagLogger, new OptionsMonitorMock<ExternalConfiguration>());
         var watcherManager = new FileWatcherManager(watcherLogger, diagnostics);
         var resilience = new HttpResilienceService(factory.CreateLogger<HttpResilienceService>(), diagnostics);
         var options = new SimpleOptionsMonitor<ExternalConfiguration>(new ExternalConfiguration());
         var httpClientFactory = new TestHttpClientFactory();
 
-        var worker = new Worker(workerLogger, httpClientFactory, lifetime, diagnostics, configService, watcherManager, resilience, options);
+        Worker worker = WorkerFactory.CreateWorker(
+            logger: workerLogger,
+            httpClientFactory: httpClientFactory,
+            lifetime: lifetime,
+            diagnostics: diagnostics,
+            fileWatcherManager: watcherManager,
+            resilienceService: resilience,
+            optionsMonitor: options);
 
-        worker.CurrentConfig = new ExternalConfiguration
-        {
+        worker.CurrentConfig = new ExternalConfiguration {
             PostFileContents = true,
             StreamingThresholdBytes = 100,
             MaxContentBytes = 10_000

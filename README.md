@@ -1,58 +1,77 @@
 ﻿FileWatchRest  
-=============  
-
-Modern Windows service that watches folders for new or changed files and POSTs file information (and optionally file contents) to a configured HTTP REST API  
+  
+Modern Windows service that watches folders for new or changed files and POSTs file information (and  
+optionally file contents) to a configured HTTP REST API  
 
 Key Features  
-------------  
-
-- **Multi-folder watching** with real-time configuration updates
-- **Bearer token authentication** for secure API communication
-- **File content processing** with configurable options
-- **Extension-based filtering** to watch only specific file types
+  
+- **Multi-folder watching** with real-time configuration updates and per-folder actions
+- **BackgroundService architecture** with dedicated debouncing and sending services
+- **Bearer token authentication** for secure API communication with automatic encryption
+- **File content processing** with streaming support for large files
+- **Extension-based filtering** and wildcard pattern exclusion
 - **Automatic file archiving** to processed folders after successful API calls
-- **Debounced detection** with low-latency posting using bounded channels
-- **Robust error handling** with configurable retry logic and r restart mechanisms
-- **Real-time diagnostics** with structured CSV logging
+- **Debounced detection** with low-latency posting using bounded channels and ArrayPool<T>
+- **Robust error handling** with configurable retry logic, circuit breaker, and restart mechanisms
+- **Real-time diagnostics** with structured CSV/JSON logging and HTTP metrics endpoints
 - **Native AOT ready** for high-performance deployment
 
 Project Structure  
------------------  
+  
+The codebase is organized into logical folders following modern .NET patterns:
 
-The codebase is organized into logical folders for better maintainability:
-
-```note
+```md
 FileWatchRest/
-├── Configuration/     # Configuration management classes
+├── Configuration/     # Configuration management and validation
 │   ├── ExternalConfiguration.cs
-│   └── ConfigurationService.cs
-├── Services/          # Core service implementations  
-│   ├── Worker.cs
-│   └── DiagnosticsService.cs
-├── Models/           # Data models and JSON contexts
+│   ├── ConfigurationService.cs
+│   ├── ExternalConfigurationValidator.cs
+│   └── SecureConfigurationHelper.cs (token encryption)
+├── Services/          # BackgroundService implementations
+│   ├── Worker.cs (orchestration)
+│   ├── FileDebounceService.cs (dedicated debouncing)
+│   ├── FileSenderService.cs (dedicated sending)
+│   ├── FileWatcherManager.cs (watcher lifecycle)
+│   ├── HttpResilienceService.cs (retry + circuit breaker)
+│   └── DiagnosticsService.cs (metrics + HTTP endpoints)
+├── Monitor/           # IOptionsMonitor pattern implementation
+│   └── ExternalConfigurationOptionsMonitor.cs
+├── Models/            # Data models with System.Text.Json source generation
 │   ├── FileNotification.cs
+│   ├── UploadMetadata.cs
 │   └── JsonContexts.cs
-├── Logging/          # Logging implementations
-│   └── SimpleFileLoggerProvider.cs (custom file + CSV logger)
-└── Program.cs        # Application entry point
+├── Logging/           # Custom structured logging
+│   ├── SimpleFileLoggerProvider.cs (CSV/JSON)
+│   └── LoggerDelegates.cs (LoggerMessage pattern)
+├── Helpers/           # Utility classes
+│   └── WildcardPatternMatcher.cs
+└── Program.cs         # Application entry point
 ```
 
 Configuration  
--------------  
-
+  
 The service uses a single JSON configuration file for all settings:
 
 **Configuration File**: `$env:ProgramData\FileWatchRest\FileWatchRest.json`  
 
-This file is created automatically with defaults and can be edited while the service is running. Changes are detected automatically and applied without restarting the service.  
+This file is created automatically with defaults and can be edited while the service is running.  
+Changes are detected automatically and applied without restarting the service.  
 
-Example configuration:
+Example configuration (typed `Folders`):
 
 ```json
 {
   "Folders": [
-    "C:\\temp\\watch",
-    "C:\\data\\incoming"
+    {
+      "FolderPath": "C:\\temp\\watch",
+      "ActionType": "RestPost"
+    },
+    {
+      "FolderPath": "C:\\data\\incoming",
+      "ActionType": "PowerShellScript",
+      "ScriptPath": "C:\\scripts\\process.ps1",
+      "Arguments": ["-Verbose"]
+    }
   ],
   "ApiEndpoint": "https://api.example.com/files",
   "BearerToken": "your-bearer-token-here-will-be-encrypted-automatically",
@@ -62,13 +81,7 @@ Example configuration:
   "AllowedExtensions": [
     ".txt",
     ".json",
-    ".xml",
-    ".csv"
-  ],
-  "ExcludePatterns": [
-    "Backup_*",
-    "*_temp*",
-    "*.bak"
+    ".xml"
   ],
   "IncludeSubdirectories": true,
   "DebounceMilliseconds": 1000,
@@ -77,7 +90,7 @@ Example configuration:
   "WatcherMaxRestartAttempts": 3,
   "WatcherRestartDelayMilliseconds": 1000,
   "DiagnosticsUrlPrefix": "http://localhost:5005/",
-  "DiagnosticsBearerToken": "your-diagnostics-bearer-token-or-omit-to-auto-generate",
+  "DiagnosticsBearerToken": null,
   "ChannelCapacity": 1000,
   "MaxParallelSends": 4,
   "FileWatcherInternalBufferSize": 65536,
@@ -88,28 +101,41 @@ Example configuration:
   "EnableCircuitBreaker": false,
   "CircuitBreakerFailureThreshold": 5,
   "CircuitBreakerOpenDurationMilliseconds": 30000,
+
   "Logging": {
     "LogType": "Csv",
     "FilePathPattern": "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}",
     "LogLevel": "Information",
-    "RetainedFileCountLimit": 14
+    "RetainedDays": 14
   }
 }
 ```
 
 Configuration Options  
----------------------  
-
+  
 **Core File Watching Settings:**  
 
-- `Folders`: Array of folder paths to watch
+- `Folders`: Array of typed folder objects. Each entry is an object with at least `FolderPath` and optional `ActionType` (one of `RestPost`, `Executable`, `PowerShellScript`) and action-specific fields such as `ExecutablePath`, `ScriptPath`, `Arguments`, and `AdditionalHeaders`. Example:
+
+```json
+"Folders": [
+  { "FolderPath": "C:\\temp\\watch", "ActionType": "RestPost" },
+  { "FolderPath": "C:\\data\\incoming", "ActionType": "Executable", "ExecutablePath": "C:\\tools\\proc.exe" }
+]
+```
 - `ApiEndpoint`: HTTP endpoint to POST file notifications to
-- `BearerToken`: Bearer token for API authentication. **Automatically encrypted** using machine-specific encryption when saved. Plain text tokens are automatically encrypted on first save.
+- `BearerToken`: Bearer token for API authentication. **Automatically encrypted** using
+  machine-specific encryption when saved. Plain text tokens are automatically encrypted on first  
+  save.  
 - `PostFileContents`: If true, reads and includes file contents in the POST
 - `MoveProcessedFiles`: If true, moves files to processed folder after successful POST
-- `ProcessedFolder`: Name of subfolder to move processed files to (default: "processed"). Files in this folder are automatically excluded from monitoring to prevent infinite loops.
+- `ProcessedFolder`: Name of subfolder to move processed files to (default: "processed"). Files in
+  this folder are automatically excluded from monitoring to prevent infinite loops.  
 - `AllowedExtensions`: Array of file extensions to watch (empty = all files)
-- `ExcludePatterns`: Array of filename patterns to exclude from processing. Supports wildcard matching with `*` (any characters) and `?` (single character). Examples: `"Backup_*"` (starts with Backup\_), `"*_temp"` (ends with \_temp), `"*.bak"` (backup files). Files matching any exclude pattern are ignored even if they pass extension filtering.
+- `ExcludePatterns`: Array of filename patterns to exclude from processing. Supports wildcard
+  matching with `*` (any characters) and `?` (single character). Examples: `"Backup_*"` (starts with  
+  Backup\_), `"*_temp"` (ends with \_temp), `"*.bak"` (backup files). Files matching any exclude  
+  pattern are ignored even if they pass extension filtering.  
 - `IncludeSubdirectories`: Whether to watch subfolders
 - `DebounceMilliseconds`: Wait time to debounce file events
 
@@ -120,46 +146,58 @@ Configuration Options
 - `WatcherMaxRestartAttempts`: Max attempts to restart a failed file watcher (default: 3)
 - `WatcherRestartDelayMilliseconds`: Delay before restarting a watcher (default: 1000)
 - `DiagnosticsUrlPrefix`: URL prefix for diagnostics endpoint (default: "<http://localhost:5005/>")
-- `DiagnosticsBearerToken`: Optional bearer token required to access diagnostics endpoints. If omitted the service will generate a secure random token on first run and persist it in the configuration file.
+- `DiagnosticsBearerToken`: Optional bearer token required to access diagnostics endpoints. If
+  omitted the service will generate a secure random token on first run and persist it in the  
+  configuration file.  
 - `ChannelCapacity`: Internal channel capacity for pending file events (default: 1000)
 - `MaxParallelSends`: Number of concurrent HTTP senders (default: 4)
 - `FileWatcherInternalBufferSize`: FileSystemWatcher buffer size in bytes (default: 65536)
 - `WaitForFileReadyMilliseconds`: Wait time for files to become ready before processing (default: 0)
-- `DiscardZeroByteFiles`: If true, files that remain zero bytes after waiting the configured `WaitForFileReadyMilliseconds` will be discarded and not posted. Default: false. Use this when producers create zero-length placeholder files that should be ignored.
-- `MaxContentBytes`: Maximum bytes of file content to include in the POST request. Files larger than this are sent without inline content.
-- `StreamingThresholdBytes`: Size threshold for switching to streaming uploads. Files larger than this use multipart streaming for uploads.
-- `EnableCircuitBreaker`: Enables an optional circuit breaker for HTTP calls. When enabled, the circuit breaker trips after a number of failures, temporarily blocking requests to allow the remote service to recover.
-- `CircuitBreakerFailureThreshold`: Number of consecutive failures required to trip the circuit breaker (default: 5).
-- `CircuitBreakerOpenDurationMilliseconds`: Time duration in milliseconds to keep the circuit breaker open before allowing retries (default: 30000).
+- `DiscardZeroByteFiles`: If true, files that remain zero bytes after waiting the configured
+  `WaitForFileReadyMilliseconds` will be discarded and not posted. Default: false. Use this when  
+  producers create zero-length placeholder files that should be ignored.  
+- `MaxContentBytes`: Maximum bytes of file content to include in the POST request. Files larger than
+  this are sent without inline content.  
+- `StreamingThresholdBytes`: Size threshold for switching to streaming uploads. Files larger than
+  this use multipart streaming for uploads.  
+- `EnableCircuitBreaker`: Enables an optional circuit breaker for HTTP calls. When enabled, the
+  circuit breaker trips after a number of failures, temporarily blocking requests to allow the  
+  remote service to recover.  
+- `CircuitBreakerFailureThreshold`: Number of consecutive failures required to trip the circuit
+  breaker (default: 5).  
+- `CircuitBreakerOpenDurationMilliseconds`: Time duration in milliseconds to keep the circuit
+  breaker open before allowing retries (default: 30000).  
 
-Security Features  
------------------  
-
-**Automatic Token Encryption**: Bearer tokens are automatically encrypted using `System.Security.Cryptography.ProtectedData` with machine-specific encryption. This means:
+`System.Security.Cryptography.ProtectedData` with machine-specific encryption. This means:
 
 - Plain text bearer tokens are automatically encrypted when the configuration is first saved
 - Encrypted tokens can only be decrypted on the same machine by the same application
 - Configuration files are safe to store in version control (tokens are encrypted)
 - No master password or key management required - Windows handles the encryption keys
 
-**Migration Support**: Existing plain text tokens are automatically detected and encrypted on the next configuration save without requiring user intervention.  
+**Migration Support**: Existing plain text tokens are automatically detected and encrypted on the  
+next configuration save without requiring user intervention.  
 
 Development and Testing  
------------------------  
-
+  
 Run locally from repository root:
 
 ```powershell
 # Build
 dotnet build FileWatchRest.sln  
 
+# Run tests (123 comprehensive tests)
+dotnet test FileWatchRest.sln
+
+# Run with coverage
+dotnet test FileWatchRest.sln --collect:"XPlat Code Coverage"
+
 # Run as console for testing
 dotnet run --project .\FileWatchRest\FileWatchRest.csproj  
 ```
 
 Packaging for Deployment  
--------------------------  
-
+  
 Prepare a deployment package (creates `./output` by default):
 
 ```powershell
@@ -169,8 +207,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -ProjectPath FileWatch
 The script automatically creates a deployment package with `install_on_target.ps1`.  
 
 Installation on Target Machine  
--------------------------------  
-
+  
 1. Copy the entire `output` folder to the target machine
 2. As Administrator, run from inside the `output` folder:
 
@@ -178,16 +215,15 @@ Installation on Target Machine
 pwsh -NoProfile -ExecutionPolicy Bypass .\install_on_target.ps1  
 ```
 
-This installs files to `$env:ProgramFiles\FileWatchRest`, creates and starts the Windows service, and sets up the configuration directory under `$env:ProgramData\FileWatchRest`.  
+This installs files to `$env:ProgramFiles\FileWatchRest`, creates and starts the Windows service,  
+and sets up the configuration directory under `$env:ProgramData\FileWatchRest`.  
 
 API Payload Format  
-------------------  
-
+  
 The service POSTs JSON data to your configured endpoint:
 
 Basic Notification (metadata)  
------------------------------  
-
+  
 ```json
 {  
   "Path": "C:\\temp\\watch\\example.txt",  
@@ -199,8 +235,7 @@ Basic Notification (metadata)
 ```
 
 Full Notification (with content)  
--------------------------------  
-
+  
 ```json
 {  
   "Path": "C:\\temp\\watch\\example.txt",  
@@ -212,13 +247,12 @@ Full Notification (with content)
 ```
 
 📊 Diagnostics Endpoints  
------------------------  
-
-The service provides a built-in HTTP server for real-time diagnostics and monitoring. The server runs on the URL specified by `DiagnosticsUrlPrefix` (default: `http://localhost:5005/`).  
+  
+The service provides a built-in HTTP server for real-time diagnostics and monitoring. The server  
+runs on the URL specified by `DiagnosticsUrlPrefix` (default: `http://localhost:5005/`).  
 
 Diagnostics Endpoints  
----------------------  
-
+  
 | Endpoint | Description | Response Format |
 |----------|-------------|-----------------|
 | `GET /` | Complete service status (same as `/status`) | JSON |
@@ -226,13 +260,14 @@ Diagnostics Endpoints
 | `GET /health` | Simple health check | JSON |
 | `GET /events` | Recent file processing events (last 500) | JSON |
 | `GET /watchers` | Currently active folder watchers | JSON |
+| `GET /config` | Current runtime configuration (normalized) | JSON |
+| `GET /metrics` | Prometheus-compatible metrics | Text |
+| `GET /circuits` | Circuit breaker states per endpoint | JSON |
 
 Examples  
---------  
-
+  
 GET /status  
-------------  
-
+  
 ```json
 {
   "ActiveWatchers": ["C:\\temp\\watch", "C:\\data\\incoming"],
@@ -251,8 +286,7 @@ GET /status
 ```
 
 GET /health  
------------  
-
+  
 ```json
 {
   "status": "healthy",
@@ -261,8 +295,7 @@ GET /health
 ```
 
 GET /events  
-----------  
-
+  
 ```json
 [
   {
@@ -296,29 +329,43 @@ GET /events
 4. Use `/events` for troubleshooting failed file processing
 
 Security and accessing diagnostics  
---------------------------------  
-
-When `DiagnosticsBearerToken` is set (or auto-generated when omitted), all diagnostics endpoints require a matching Authorization header with a bearer token. Example using curl:
+  
+When `DiagnosticsBearerToken` is set (or auto-generated when omitted), all diagnostics endpoints  
+require a matching Authorization header with a bearer token. Example using curl:
 
 ```bash
 curl -H "Authorization: Bearer <token>" http://localhost:5005/status
 ```
 
-If you do not explicitly set `DiagnosticsBearerToken` in your configuration file, the service will generate a random token on first run and persist it in the configuration file so you can use it to access diagnostics. Treat this token like any other secret — rotate it if you believe it has been exposed.  
+If you do not explicitly set `DiagnosticsBearerToken` in your configuration file, the service will  
+generate a random token on first run and persist it in the configuration file so you can use it to  
+access diagnostics. Treat this token like any other secret — rotate it if you believe it has been  
+exposed.  
 
-Note: when a diagnostics token is auto-generated (either when creating the default configuration or when adding the missing token to an existing configuration), the service logs the token once at startup so operators can find it. The token is then persisted to the configuration file and encrypted on Windows.  
+Note: when a diagnostics token is auto-generated (either when creating the default configuration or  
+when adding the missing token to an existing configuration), the service logs the token once at  
+startup so operators can find it. The token is then persisted to the configuration file and  
+encrypted on Windows.  
 
 Logging  
--------  
+  
+Logging is configured from the same external configuration file used by the service  
+(`$env:ProgramData\\FileWatchRest\\FileWatchRest.json`)  
 
-Logging is configured from the same external configuration file used by the service (`$env:ProgramData\\FileWatchRest\\FileWatchRest.json`)  
-
-You can select CSV, JSON, or both via the `Logging` / `LoggingOptions` settings in the configuration file. By default the service emits CSV logs and JSON is opt-in. The configuration now focuses on a single file name/pattern and an explicit `LogType` selector. The provider will append the correct file extension based on the `LogType` value.  
+configuration file. By default the service emits CSV logs and JSON is opt-in. The configuration  
+focuses on a single file name/pattern and an explicit `LogType` selector. The provider automatically  
+appends the correct file extension based on the `LogType` value.  
+The service uses modern structured logging with LoggerMessage delegates for zero-allocation logging.  
+You can select CSV, JSON, or both via the `Logging` / `LoggingOptions` settings in the configuration  
+file. By default the service emits CSV logs and JSON is opt-in. The configuration focuses on a single  
+file name/pattern and an explicit `LogType` selector. The provider automatically appends the correct  
+file extension based on the `LogType` value.  
 
 Default logging locations (per-run timestamped by default):
 
 - `$env:ProgramData\\FileWatchRest\\logs\\FileWatchRest_{0:yyyyMMdd_HHmmss}.csv` (structured CSV)
-- `$env:ProgramData\\FileWatchRest\\logs\\FileWatchRest_{0:yyyyMMdd_HHmmss}.ndjson` (structured JSON)
+- `$env:ProgramData\\FileWatchRest\\logs\\FileWatchRest_{0:yyyyMMdd_HHmmss}.ndjson` (structured
+  JSON)  
 
 Example `Logging` section (place this in the external configuration `FileWatchRest.json`):
 
@@ -327,55 +374,54 @@ Example `Logging` section (place this in the external configuration `FileWatchRe
   "LogType": "Csv",        // One of: "Csv", "Json", "Both"
   "FilePathPattern": "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}",
   "LogLevel": "Information",
-  "RetainedFileCountLimit": 14
+  "RetainedDays": 14
 }
 ```
 
 Notes:
 
-- `LogType` selects which file formats the built-in provider writes. The provider automatically appends the appropriate extension (`.csv` for Csv, `.ndjson` for Json).
-- `LogLevel` can be adjusted at runtime via the configuration file; note that changing the log file target (FilePathPattern or LogType) typically requires a service restart for the file provider to open new files.
+- `LogType` selects which file formats the built-in provider writes. The provider automatically
+  appends the appropriate extension (`.csv` for Csv, `.ndjson` for Json).  
+- `LogLevel` can be adjusted at runtime via the configuration file; note that changing the log file
+  target (FilePathPattern or LogType) typically requires a service restart for the file provider to  
+  open new files.  
 
 Troubleshooting  
----------------  
-
+  
 Service Won't Start  
--------------------  
-
+  
 - Run the executable directly from command prompt to see console errors
 - Check Windows Event Log for startup failures
 - Verify configuration file exists and is valid JSON
 
 Files Not Being Detected  
-------------------------  
-
+  
 - Check that folder paths in configuration exist and are accessible
 - Verify file extensions match `AllowedExtensions` if specified
 - Review logs (JSON/CSV) for watcher errors or restart attempts
-- **Note**: Files in folders matching the `ProcessedFolder` configuration value are automatically ignored to prevent infinite processing loops
+- **Note**: Files in folders matching the `ProcessedFolder` configuration value are automatically
+  ignored to prevent infinite processing loops  
 
 API Calls Failing  
------------------  
-
+  
 - Verify `ApiEndpoint` is correct and accessible
 - Check `BearerToken` if API requires authentication
 - Review retry settings in `appsettings.json`
 - Check logs (JSON/CSV) for HTTP status codes
 
 Native AOT Deployment  
-----------------------  
-
+  
 For high-performance deployment with Native AOT:
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-**Requirements**: Visual C++ build tools must be installed on the build machine for Native AOT compilation.  
+**Requirements**: Visual C++ build tools must be installed on the build machine for Native AOT  
+compilation.  
 
 Configuration Management  
--------------------------  
-
+  
 - **Single Configuration File**: All settings are now in one place - `FileWatchRest.json`
 - Configuration changes are detected automatically - no service restart required
 - Invalid JSON will cause service to use previous valid configuration
@@ -383,14 +429,46 @@ Configuration Management
 - Configuration file can be edited manually or through automated deployment scripts
 - No need for separate `appsettings.json` modifications
 
+Architecture and Modern Patterns  
+
+The service follows modern .NET architecture patterns:
+
+**BackgroundService Pattern:**  
+
+- `FileDebounceService`: Dedicated service for debouncing file events
+- `FileSenderService`: Dedicated service for parallel HTTP sending
+- `Worker`: Orchestration service managing the overall workflow
+- All services properly implement `StartAsync`/`StopAsync` lifecycle
+
+**Performance Optimizations:**  
+
+- `ArrayPool<T>` for memory-efficient buffer management
+- Bounded channels for backpressure handling
+- Streaming uploads for large files (multipart/form-data)
+- LoggerMessage source generators for zero-allocation logging
+
+**Resilience and Reliability:**  
+
+- `HttpResilienceService`: Configurable retry logic with exponential backoff
+- Circuit breaker pattern to protect downstream services
+- File watcher restart mechanisms with backoff
+- Configuration hot-reload without service restart
+
+**Testing and Quality:**  
+
+- 123 comprehensive tests with xUnit
+- Integration tests for end-to-end workflows
+- Reflection-based testing of internal methods
+- Code coverage tracking (66% Worker.cs, 89% FileWatcherManager)
+
 Coding standards & developer tooling  
-----------------------------------  
+  
+- CI runs on GitHub Actions (see `.github/workflows/ci.yml`) and performs restore, build, tests and
+  a format check. The CI will also fail if any file-level using directives are present (via the  
+  repository `Directory.Build.targets` enforcement).  
 
-- CI runs on GitHub Actions (see `.github/workflows/ci.yml`) and performs restore, build, tests and a format check. The CI will also fail if any file-level using directives are present (via the repository `Directory.Build.targets` enforcement).
+If a build error points out a file-level using, move that using to `FileWatchRest/GlobalUsings.cs`  
+and re-run the build or format tools.  
 
-If a build error points out a file-level using, move that using to `FileWatchRest/GlobalUsings.cs` and re-run the build or format tools.  
-
----
-
-FileWatchRest - Modern file watching service with REST API integration
-------------------------------------------------------------------
+FileWatchRest - Modern file watching service with REST API integration  
+----------------------------------------------------------------------  

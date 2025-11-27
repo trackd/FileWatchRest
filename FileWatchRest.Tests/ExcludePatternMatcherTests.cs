@@ -1,7 +1,11 @@
-﻿namespace FileWatchRest.Tests;
 
-public class ExcludePatternMatcherTests
-{
+using FileWatchRest.Helpers;
+
+namespace FileWatchRest.Tests;
+/// <summary>
+/// Tests for exclude pattern matching using the framework-based FileSystemPatternMatcher.
+/// </summary>
+public class ExcludePatternMatcherTests {
     [Theory]
     [InlineData("SAP_file.txt", new[] { "SAP_*" }, true)]
     [InlineData("file_SAP.txt", new[] { "SAP_*" }, false)]
@@ -17,60 +21,38 @@ public class ExcludePatternMatcherTests
     [InlineData("file.txt", new[] { "SAP_*", "*.txt" }, true)]
     [InlineData("file.csv", new[] { "SAP_*", "*.txt" }, false)]
     [InlineData("SAP_HelloWorld.log", new[] { "SAP_*.log" }, true)]
-    public void ExcludePatternMatcher_Matches_Correctly(string fileName, string[] patterns, bool expected)
-    {
+    public void ExcludePatternMatcherMatchesCorrectly(string fileName, string[] patterns, bool expected) {
         // Arrange & Act
-        var excluded = WildcardPatternCache.MatchesAny(fileName, patterns);
+        bool excluded = FileSystemPatternMatcher.MatchesAny(fileName, patterns);
 
         // Assert
         Assert.Equal(expected, excluded);
     }
 
     [Fact]
-    public void WildcardPatternMatcher_CaseInsensitive_Matches()
-    {
-        var matcher = new WildcardPatternMatcher("SAP_*");
-
-        Assert.True(matcher.IsMatch("SAP_file.txt"));
-        Assert.True(matcher.IsMatch("sap_file.txt"));
-        Assert.True(matcher.IsMatch("SaP_FiLe.TxT"));
+    public void FileSystemPatternMatcherCaseInsensitiveMatches() {
+        Assert.True(FileSystemPatternMatcher.IsMatch("SAP_file.txt", "SAP_*"));
+        Assert.True(FileSystemPatternMatcher.IsMatch("sap_file.txt", "SAP_*"));
+        Assert.True(FileSystemPatternMatcher.IsMatch("SaP_FiLe.TxT", "SAP_*"));
     }
 
     [Fact]
-    public void WildcardPatternMatcher_SpecialRegexChars_Escaped()
-    {
-        var matcher = new WildcardPatternMatcher("file.txt");
-
-        Assert.True(matcher.IsMatch("file.txt"));
-        Assert.False(matcher.IsMatch("fileXtxt")); // Dot should not act as regex wildcard
+    public void FileSystemPatternMatcherSpecialCharsNotRegex() {
+        Assert.True(FileSystemPatternMatcher.IsMatch("file.txt", "file.txt"));
+        Assert.False(FileSystemPatternMatcher.IsMatch("fileXtxt", "file.txt")); // Dot is literal, not regex wildcard
     }
 
     [Fact]
-    public void WildcardPatternMatcher_Span_Matches()
-    {
-        var matcher = new WildcardPatternMatcher("*.log");
-        ReadOnlySpan<char> fileName = "debug.log".AsSpan();
-
-        Assert.True(matcher.IsMatch(fileName));
-    }
-
-    [Fact]
-    public void WildcardPatternCache_Caches_Patterns()
-    {
-        var pattern = "test_*";
-        var matcher1 = WildcardPatternCache.GetOrCreate(pattern);
-        var matcher2 = WildcardPatternCache.GetOrCreate(pattern);
-
-        Assert.Same(matcher1, matcher2);
+    public void FileSystemPatternMatcherWildcardStarMatches() {
+        Assert.True(FileSystemPatternMatcher.IsMatch("debug.log", "*.log"));
+        Assert.True(FileSystemPatternMatcher.IsMatch("app.log", "*.log"));
+        Assert.False(FileSystemPatternMatcher.IsMatch("debug.txt", "*.log"));
     }
 
     [Theory]
     [InlineData("*", true)]
     [InlineData("?", true)]
-    [InlineData("[abc]", true)]
     [InlineData("literal", false)]
-    public void ContainsWildcards_DetectsCorrectly(string pattern, bool expected)
-    {
-        Assert.Equal(expected, WildcardPatternMatcher.ContainsWildcards(pattern));
-    }
+    [InlineData("", false)]
+    public void ContainsWildcardsDetectsCorrectly(string pattern, bool expected) => Assert.Equal(expected, FileSystemPatternMatcher.ContainsWildcards(pattern));
 }

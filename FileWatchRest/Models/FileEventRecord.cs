@@ -1,7 +1,6 @@
-﻿namespace FileWatchRest.Models;
+namespace FileWatchRest.Models;
 
-public sealed class FileEventRecord
-{
+public sealed class FileEventRecord {
     public string Path { get; set; }
     public DateTimeOffset Timestamp { get; set; }
     public bool PostedSuccess { get; set; }
@@ -9,8 +8,7 @@ public sealed class FileEventRecord
 
     public FileEventRecord() { Path = string.Empty; Timestamp = DateTimeOffset.Now; PostedSuccess = false; StatusCode = null; }
 
-    public FileEventRecord(string path, DateTimeOffset timestamp, bool postedSuccess, int? statusCode)
-    {
+    public FileEventRecord(string path, DateTimeOffset timestamp, bool postedSuccess, int? statusCode) {
         Path = path;
         Timestamp = timestamp;
         PostedSuccess = postedSuccess;

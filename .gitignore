@@ -16,7 +16,7 @@ test_alc.ps1
 testimages.ps1
 testimages/
 testdata/
-
+TestResults/
 # OS files
 .DS_Store
 Thumbs.db
@@ -24,6 +24,9 @@ Thumbs.db
 # User-specific files
 *.user
 
-.github/chatmodes/*
-.github/instructions/*
-.github/prompts/*
+# Local-only markdown files (agents, instructions, prompts, processing notes)
+.github/agents/*.md
+.github/instructions/*.md
+.github/prompts/*.md
+Copilot-Processing.md
+format-report.json

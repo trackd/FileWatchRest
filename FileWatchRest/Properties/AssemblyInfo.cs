@@ -1,1 +1,1 @@
-﻿[assembly: InternalsVisibleTo("FileWatchRest.Tests")]
+[assembly: InternalsVisibleTo("FileWatchRest.Tests")]

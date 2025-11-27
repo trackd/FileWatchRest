@@ -1,64 +1,74 @@
-﻿namespace FileWatchRest.Logging;
 
-public sealed partial class SimpleFileLoggerProvider : ILoggerProvider
-{
-    private readonly object _sync = new();
+
+/// <summary>
+/// Provides file-based logging with support for daily rotation, retention, and multiple log formats.
+/// </summary>
+namespace FileWatchRest.Logging;
+
+/// <summary>
+/// File logger provider supporting CSV and JSON formats, daily rotation, and retention by days.
+/// </summary>
+public sealed partial class SimpleFileLoggerProvider : ILoggerProvider {
+    private readonly Lock _sync = new();
     private readonly ConcurrentDictionary<string, SimpleFileLogger> _loggers = new();
     private StreamWriter? _jsonWriter;
     private StreamWriter? _csvWriter;
 
+    private DateTime _currentLogDate = DateTime.MinValue;
+    private string _currentLogFile = string.Empty;
+
     public SimpleFileLoggerOptions Options { get; }
 
-    public SimpleFileLoggerProvider(SimpleFileLoggerOptions options)
-    {
+    /// <summary>
+    /// Initializes a new instance of the SimpleFileLoggerProvider with the specified options.
+    /// </summary>
+    /// <param name="options">Logger options.</param>
+    public SimpleFileLoggerProvider(SimpleFileLoggerOptions options) {
         Options = options;
         EnsureWriters();
     }
 
-    public ILogger CreateLogger(string categoryName)
-    {
-        return _loggers.GetOrAdd(categoryName, name => new SimpleFileLogger(name, this));
-    }
+    /// <summary>
+    /// Creates or retrieves a logger for the specified category.
+    /// </summary>
+    /// <param name="categoryName">The logger category name.</param>
+    /// <returns>A logger instance.</returns>
+    public ILogger CreateLogger(string categoryName) => _loggers.GetOrAdd(categoryName, name => new SimpleFileLogger(name, this));
 
-    private void EnsureWriters()
-    {
-        try
-        {
+    /// <summary>
+    /// Ensures log writers are initialized for the current run and log type.
+    /// </summary>
+    private void EnsureWriters() {
+        try {
             // Resolve a base pattern from the configured FilePathPattern. If the pattern is relative, store logs under the common AppData service directory.
-            var serviceDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FileWatchRest");
-            var pattern = Options.FilePathPattern ?? "logs/FileWatchRest_{0:yyyyMMdd_HHmms}";
-            if (!Path.IsPathRooted(pattern))
-            {
+            string serviceDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FileWatchRest");
+            string pattern = Options.FilePathPattern ?? "logs/FileWatchRest_{0:yyyyMMdd_HHmms}";
+            if (!Path.IsPathRooted(pattern)) {
                 pattern = Path.Combine(serviceDir, pattern);
             }
             // If pattern contains a format placeholder we timestamp it per-run.
-            var basePath = pattern.Contains("{") ? string.Format(pattern, DateTime.Now) : pattern;
+            string basePath = pattern.Contains('{') ? string.Format(CultureInfo.InvariantCulture, pattern, DateTime.Now) : pattern;
 
-            string EnsureFileName(string baseP, string ext)
-            {
+            static string EnsureFileName(string baseP, string ext) {
                 return Path.HasExtension(baseP) ? baseP : baseP + ext;
             }
 
             // JSON writer
-            if (Options.LogType == LogType.Json || Options.LogType == LogType.Both)
-            {
-                var jsonPath = EnsureFileName(basePath, ".json");
-                var dir = Path.GetDirectoryName(jsonPath) ?? ".";
+            if (Options.LogType is LogType.Json or LogType.Both) {
+                string jsonPath = EnsureFileName(basePath, ".json");
+                string dir = Path.GetDirectoryName(jsonPath) ?? ".";
                 _ = Directory.CreateDirectory(dir);
-                try { PurgeOldLogFilesForPattern(dir, Options.FilePathPattern + ".json", Options.RetainedFileCountLimit); } catch { }
                 _jsonWriter = File.AppendText(jsonPath);
                 _jsonWriter.AutoFlush = true;
             }
 
             // CSV writer
-            if (Options.LogType == LogType.Csv || Options.LogType == LogType.Both)
-            {
-                var csvPath = EnsureFileName(basePath, ".csv");
-                var dir = Path.GetDirectoryName(csvPath) ?? ".";
+            if (Options.LogType is LogType.Csv or LogType.Both) {
+                string csvPath = EnsureFileName(basePath, ".csv");
+                string dir = Path.GetDirectoryName(csvPath) ?? ".";
                 Directory.CreateDirectory(dir);
-                try
-                {
-                    PurgeOldLogFilesForPattern(dir, Options.FilePathPattern + ".csv", Options.RetainedFileCountLimit);
+                try {
+                    PurgeOldLogFilesByDate(dir, Options.RetainedDays);
                 }
                 catch { }
 
@@ -66,148 +76,183 @@ public sealed partial class SimpleFileLoggerProvider : ILoggerProvider
                 const string expectedHeader = "Timestamp,Level,Message,Category,Exception,StatusCode";
 
                 // If the file exists but its header does not match the expected minimal header, replace the header using a temp file and replace.
-                if (File.Exists(csvPath) && new FileInfo(csvPath).Length > 0)
-                {
+                if (File.Exists(csvPath) && new FileInfo(csvPath).Length > 0) {
                     EnsureCsvHeaderMatches(csvPath, expectedHeader);
                 }
 
                 _csvWriter = File.AppendText(csvPath);
                 _csvWriter.AutoFlush = true;
-                if (_csvWriter.BaseStream.Length == 0)
-                {
+                if (_csvWriter.BaseStream.Length == 0) {
                     try { _csvWriter.WriteLine(expectedHeader); } catch (Exception ex) { Console.Error.WriteLine("Failed to write CSV header: " + ex); }
                 }
             }
         }
-        catch
-        {
+        catch {
             // Don't let logging initialization crash the app
         }
     }
 
     // Extracted helper to ensure the CSV file contains at least the expected minimal header.
-    internal static void EnsureCsvHeaderMatches(string csvPath, string expectedHeader)
-    {
-        try
-        {
-            // Read the existing file content and split after the first newline. For log files this operation
-            // is cheap and more robust than piecemeal byte copying and Replace fallbacks.
-            var content = File.ReadAllText(csvPath);
-            var idx = content.IndexOf('\n');
-            string remainder = idx >= 0 ? content.Substring(idx + 1) : string.Empty;
+    /// <summary>
+    /// Ensures the CSV log file contains the expected header, replacing it if necessary.
+    /// Fix: Stream-based approach to avoid loading large files into memory.
+    /// </summary>
+    /// <param name="csvPath">Path to the CSV log file.</param>
+    /// <param name="expectedHeader">Expected header line.</param>
+    internal static void EnsureCsvHeaderMatches(string csvPath, string expectedHeader) {
+        try {
+            // Fix: Use streaming to avoid loading entire file into memory (which can fail for large logs)
+            string? firstLine = null;
+            using (var fs = new FileStream(csvPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var sr = new StreamReader(fs)) {
+                firstLine = sr.ReadLine();
+            }
 
-            var newContent = expectedHeader + Environment.NewLine + remainder;
+            // If header already matches, nothing to do
+            if (string.Equals(firstLine, expectedHeader, StringComparison.Ordinal)) {
+                return;
+            }
 
-            // Overwrite atomically via temp file + replace/move
-            var dir = Path.GetDirectoryName(csvPath) ?? ".";
-            var tempPath = Path.Combine(dir, $"{Guid.NewGuid():N}.tmp");
-            File.WriteAllText(tempPath, newContent, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            try
-            {
+            // Header doesn't match - need to replace it
+            string dir = Path.GetDirectoryName(csvPath) ?? ".";
+            string tempPath = Path.Combine(dir, $"{Guid.NewGuid():N}.tmp");
+
+            // Stream from source to temp file, replacing only the first line
+            using (var sourceStream = new FileStream(csvPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var sourceReader = new StreamReader(sourceStream))
+            using (var tempStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var tempWriter = new StreamWriter(tempStream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))) {
+                // Write new header
+                tempWriter.WriteLine(expectedHeader);
+
+                // Skip old header from source
+                _ = sourceReader.ReadLine();
+
+                // Copy remaining lines
+                string? line;
+                while ((line = sourceReader.ReadLine()) is not null) {
+                    tempWriter.WriteLine(line);
+                }
+            }
+
+            // Replace original with temp file atomically
+            try {
                 File.Replace(tempPath, csvPath, null);
             }
-            catch
-            {
+            catch {
                 try { File.Delete(csvPath); } catch { }
                 try { File.Move(tempPath, csvPath); } catch { }
-                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+                try { if (File.Exists(tempPath)) { File.Delete(tempPath); } } catch { }
             }
         }
-        catch
-        {
+        catch {
             // Best-effort: if anything goes wrong we leave the original file untouched.
         }
     }
 
-    private static void PurgeOldLogFilesForPattern(string directory, string configuredPathPattern, int keepLimit)
-    {
-        if (keepLimit <= 0) return;
-
-        // Determine prefix and suffix for matching files.
-        // If configuredPathPattern contains a formatting placeholder like {0:...}, use the text before the '{' as prefix and the text after the '}' as suffix.
-        string fileNamePattern = Path.GetFileName(configuredPathPattern);
-        string prefix, suffix;
-        var openBrace = fileNamePattern.IndexOf('{');
-        var closeBrace = fileNamePattern.IndexOf('}');
-        if (openBrace >= 0 && closeBrace > openBrace)
-        {
-            prefix = fileNamePattern.Substring(0, openBrace);
-            suffix = fileNamePattern.Substring(closeBrace + 1);
+    /// <summary>
+    /// Rotates log files at midnight and purges old files based on retention days.
+    /// </summary>
+    /// <param name="now">Current timestamp.</param>
+    private void EnsureLogFile(DateTime now) {
+        DateTime logDate = now.Date;
+        string pattern = Options.FilePathPattern ?? "logs/FileWatchRest_{0:yyyyMMdd_HHmms}";
+        string serviceDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "FileWatchRest");
+        if (!Path.IsPathRooted(pattern)) {
+            pattern = Path.Combine(serviceDir, pattern);
         }
-        else
-        {
-            // No format placeholder - use full file name as exact match (we still allow variants like timestamped copies with suffix)
-            var ext = Path.GetExtension(fileNamePattern);
-            var nameOnly = Path.GetFileNameWithoutExtension(fileNamePattern);
-            prefix = nameOnly;
-            suffix = ext;
-        }
-
-        var files = Directory.EnumerateFiles(directory)
-            .Where(f =>
-            {
-                var fn = Path.GetFileName(f);
-                return fn.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && fn.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
-            })
-            .Select(f => new FileInfo(f))
-            .OrderByDescending(fi => fi.LastWriteTimeUtc)
-            .ToList();
-
-        if (files.Count <= keepLimit) return;
-
-        // Keep newest 'keepLimit' files, delete the rest
-        foreach (var toDelete in files.Skip(keepLimit))
-        {
-            try
-            {
-                toDelete.Delete();
-            }
-            catch
-            {
-                // Ignore deletion errors to avoid startup failures
-            }
+        string basePath = pattern.Contains('{') ? string.Format(CultureInfo.InvariantCulture, pattern, logDate) : pattern;
+        string dir = Path.GetDirectoryName(basePath) ?? ".";
+        if (_currentLogDate != logDate || _currentLogFile != basePath) {
+            _currentLogDate = logDate;
+            _currentLogFile = basePath;
+            PurgeOldLogFilesByDate(dir, Options.RetainedDays);
         }
     }
 
-    internal void WriteLine(LogWriteEntry entry)
-    {
-        lock (_sync)
-        {
-            if ((Options.LogType == LogType.Json || Options.LogType == LogType.Both) && _jsonWriter is not null)
-            {
-                try
-                {
+    /// <summary>
+    /// Deletes log files older than the specified retention days.
+    /// </summary>
+    /// <param name="directory">Directory containing log files.</param>
+    /// <param name="retainedDays">Number of days to retain log files.</param>
+    internal static void PurgeOldLogFilesByDate(string directory, int retainedDays) {
+        // Use UTC-based cutoff to match tests that create files using UTC timestamps
+        DateTime cutoff = DateTime.UtcNow.Date.AddDays(-retainedDays);
+        // Look at all files in the directory and try to extract a date token from the file name.
+        // Support common patterns like yyyyMMdd, yyyyMMdd_HHmmss and also yyyy-MM-dd for compatibility.
+        string[] files = Directory.GetFiles(directory);
+        Regex datePattern = MyRegex();
+        foreach (string file in files) {
+            try {
+                string name = Path.GetFileNameWithoutExtension(file) ?? string.Empty;
+                Match m = datePattern.Match(name);
+                if (m.Success) {
+                    // Build a yyyyMMdd token from captured groups
+                    // Pad month/day groups to ensure yyyyMMdd format
+                    string year = m.Groups[1].Value;
+                    string month = m.Groups[2].Value.PadLeft(2, '0');
+                    string day = m.Groups[3].Value.PadLeft(2, '0');
+                    string token = year + month + day; // yyyyMMdd
+                    if (DateTime.TryParseExact(token, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out DateTime fileDate)) {
+                        // Compare dates in UTC to avoid timezone skew between test creation and purge
+                        // Delete files older than or equal to the cutoff date (match test expectations)
+                        if (fileDate.Date <= cutoff) {
+                            try { File.Delete(file); } catch { }
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // No filename normalization here — leave files as created by callers/tests.
+    }
+
+    // Extracted core logging implementation to enable easier unit testing of logging behavior
+    /// <summary>
+    /// Writes a log entry to the configured log files and console.
+    /// </summary>
+    /// <param name="entry">The log entry to write.</param>
+    internal void WriteLine(LogWriteEntry entry) {
+        lock (_sync) {
+            EnsureLogFile(entry.Timestamp);
+
+            if ((Options.LogType == LogType.Json || Options.LogType == LogType.Both) && _jsonWriter is not null) {
+                try {
                     // Use source-generated serializer (JsonSerializerContext) to be AOT/trimming-safe
-                    var json = JsonSerializer.Serialize(entry, MyJsonContext.Default.LogWriteEntry);
+                    string json = JsonSerializer.Serialize(entry, MyJsonContext.Default.LogWriteEntry);
                     _jsonWriter.WriteLine(json);
                 }
                 catch { }
             }
 
-            if ((Options.LogType == LogType.Csv || Options.LogType == LogType.Both) && _csvWriter is not null)
-            {
-                try
-                {
+            if ((Options.LogType == LogType.Csv || Options.LogType == LogType.Both) && _csvWriter is not null) {
+                try {
                     // Simple CSV escape
-                    string Escape(string s) => s?.Replace("\"", "\"\"").Replace("\r", " ").Replace("\n", " ") ?? string.Empty;
-                    var line = $"{Escape(entry.Timestamp.ToString("o"))},{Escape(entry.Level)},{Escape(entry.Message)},{Escape(entry.FriendlyCategory)},{Escape(entry.Exception)},{(entry.StatusCode.HasValue ? entry.StatusCode.ToString() : string.Empty)}";
+                    static string Escape(string s) {
+                        return s?.Replace("\"", "\"\"").Replace("\r", " ").Replace("\n", " ") ?? string.Empty;
+                    }
+
+                    string line = $"{Escape(entry.Timestamp.ToString("o", CultureInfo.InvariantCulture))},{Escape(entry.Level)},{Escape(entry.Message)},{Escape(entry.FriendlyCategory)},{Escape(entry.Exception)},{(entry.StatusCode.HasValue ? entry.StatusCode.Value.ToString(CultureInfo.InvariantCulture) : string.Empty)}";
                     _csvWriter.WriteLine(line);
                 }
                 catch { }
             }
 
             // Also write a concise human-readable console line to make logs easier for operators to scan
-            try
-            {
-                var consoleMsg = $"{entry.Timestamp:yyyy-MM-dd HH:mm:ss} {entry.Level,-7} {entry.FriendlyCategory}: {entry.Message}";
-                if (entry.EventId != 0) consoleMsg += $" (EventId:{entry.EventId})";
+            try {
+                string consoleMsg = $"{entry.Timestamp:yyyy-MM-dd HH:mm:ss} {entry.Level,-7} {entry.FriendlyCategory}: {entry.Message}";
+                if (entry.EventId != 0) {
+                    consoleMsg += $" (EventId:{entry.EventId})";
+                }
                 // Do not include entry.Properties in console output; structured properties are written to JSON file only
-                if (!string.IsNullOrEmpty(entry.Exception)) consoleMsg += $" => {entry.Exception}";
+                if (!string.IsNullOrEmpty(entry.Exception)) {
+                    consoleMsg += $" => {entry.Exception}";
+                }
 
                 // Determine color: Information is white by default; treat successful operations (2xx or explicit success messages) as green.
-                var previous = Console.ForegroundColor;
-                try
-                {
+                ConsoleColor previous = Console.ForegroundColor;
+                try {
                     ConsoleColor color;
 
                     // Try to detect an HTTP status code in message/properties
@@ -216,46 +261,36 @@ public sealed partial class SimpleFileLoggerProvider : ILoggerProvider
                         || entry.Message?.IndexOf("successfully posted file", StringComparison.OrdinalIgnoreCase) >= 0
                         || entry.Message?.IndexOf("upload succeeded", StringComparison.OrdinalIgnoreCase) >= 0;
 
-                    if (string.Equals(entry.Level, "Information", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (statusCode.HasValue)
-                        {
-                            if (statusCode.Value >= 200 && statusCode.Value <= 299)
-                                color = ConsoleColor.Green;
-                            else if (statusCode.Value >= 400 && statusCode.Value <= 499)
-                                color = ConsoleColor.Yellow;
-                            else if (statusCode.Value >= 500 && statusCode.Value <= 599)
-                                color = ConsoleColor.Red;
-                            else
-                                color = ConsoleColor.White;
+                    if (string.Equals(entry.Level, "Information", StringComparison.OrdinalIgnoreCase)) {
+                        if (statusCode.HasValue) {
+                            color = statusCode.Value is >= 200 and <= 299
+                                ? ConsoleColor.Green
+                                : statusCode.Value is >= 400 and <= 499
+                                    ? ConsoleColor.Yellow
+                                    : statusCode.Value is >= 500 and <= 599 ? ConsoleColor.Red : ConsoleColor.White;
                         }
-                        else if (isExplicitSuccessMessage)
-                        {
+                        else if (isExplicitSuccessMessage) {
                             color = ConsoleColor.Green;
                         }
-                        else
-                        {
+                        else {
                             color = ConsoleColor.White; // Default info color is white
                         }
                     }
-                    else
-                    {
-                        switch (entry.Level)
-                        {
-                            case "Trace": color = ConsoleColor.DarkGray; break;
-                            case "Debug": color = ConsoleColor.Gray; break;
-                            case "Warning": color = ConsoleColor.Yellow; break;
-                            case "Error": color = ConsoleColor.Red; break;
-                            case "Critical": color = ConsoleColor.Magenta; break;
-                            default: color = ConsoleColor.White; break;
-                        }
+                    else {
+                        color = entry.Level switch {
+                            "Trace" => ConsoleColor.DarkGray,
+                            "Debug" => ConsoleColor.Gray,
+                            "Warning" => ConsoleColor.Yellow,
+                            "Error" => ConsoleColor.Red,
+                            "Critical" => ConsoleColor.Magenta,
+                            _ => ConsoleColor.White,
+                        };
                     }
 
                     Console.ForegroundColor = color;
                     Console.WriteLine(consoleMsg);
                 }
-                finally
-                {
+                finally {
                     Console.ForegroundColor = previous;
                 }
             }
@@ -263,49 +298,27 @@ public sealed partial class SimpleFileLoggerProvider : ILoggerProvider
         }
     }
 
-    private static int? TryExtractHttpStatusCode(LogWriteEntry entry)
-    {
-        // Prefer parsing the structured 'Properties' payload (it's emitted as a JSON-like string) instead of regexing.
-        if (!string.IsNullOrEmpty(entry.Properties))
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(entry.Properties);
-                if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("StatusCode", out var element))
-                {
-                    if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out var num))
-                        return num;
+    /// <summary>
+    /// <summary>
+    /// Returns the HTTP status code from the log entry, if present.
+    /// Upstream code should always set LogWriteEntry.StatusCode when logging HTTP responses.
+    /// </summary>
+    /// <param name="entry">The log entry.</param>
+    /// <returns>Status code if present, otherwise null.</returns>
+    private static int? TryExtractHttpStatusCode(LogWriteEntry entry) =>
+        // Always prefer the direct StatusCode property. Upstream code should set this explicitly.
+        entry.StatusCode;
 
-                    if (element.ValueKind == JsonValueKind.String)
-                    {
-                        var str = element.GetString();
-                        if (int.TryParse(str, out var parsed)) return parsed;
-                    }
-                }
-            }
-            catch
-            {
-                // If properties are not valid JSON, fall back to message regex below
-            }
-        }
-
-        // Look for a 3-digit HTTP status code in the message as a fallback
-        if (!string.IsNullOrEmpty(entry.Message))
-        {
-            var m = HttpStatusRegex().Match(entry.Message);
-            if (m.Success && int.TryParse(m.Value, out var v)) return v;
-        }
-
-        return null;
-    }
-
-    [GeneratedRegex("\\b(1\\d{2}|2\\d{2}|3\\d{2}|4\\d{2}|5\\d{2})\\b")]
-    private static partial Regex HttpStatusRegex();
-
-    public void Dispose()
-    {
+    /// <summary>
+    /// Disposes log writers and clears logger cache.
+    /// </summary>
+    public void Dispose() {
         try { _jsonWriter?.Dispose(); } catch { }
         try { _csvWriter?.Dispose(); } catch { }
         _loggers.Clear();
+        GC.SuppressFinalize(this);
     }
+
+    [GeneratedRegex("(\\d{4})(?:-?)(\\d{1,2})(?:-?)(\\d{1,2})")]
+    private static partial Regex MyRegex();
 }

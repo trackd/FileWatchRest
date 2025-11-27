@@ -1,7 +1,26 @@
 ﻿{
   "Folders": [
-    "C:\\temp\\watch",
-    "C:\\data\\incoming"
+    {
+      "FolderPath": "C:\\temp\\watch",
+      "ActionType": "RestPost"
+    },
+    {
+      "FolderPath": "C:\\data\\incoming",
+      "ActionType": "PowerShellScript",
+      "ScriptPath": "C:\\scripts\\process.ps1",
+      "Arguments": [
+        "-Path",
+        "{FilePath}"
+      ]
+    },
+    {
+      "FolderPath": "C:\\data\\outgoing",
+      "ActionType": "PowerShellScript",
+      "ScriptPath": "C:\\scripts\\processObject.ps1",
+      "Arguments": [
+        "{FileNotification:json}"
+      ]
+    }
   ],
   "ApiEndpoint": "https://api.example.com/files",
   "BearerToken": "your-bearer-token-here-will-be-encrypted-automatically",
@@ -11,8 +30,7 @@
   "AllowedExtensions": [
     ".txt",
     ".json",
-    ".xml",
-    ".csv"
+    ".xml"
   ],
   "ExcludePatterns": [
     "Backup_*",
@@ -26,7 +44,7 @@
   "WatcherMaxRestartAttempts": 3,
   "WatcherRestartDelayMilliseconds": 1000,
   "DiagnosticsUrlPrefix": "http://localhost:5005/",
-  "DiagnosticsBearerToken": "your-diagnostics-bearer-token-or-omit-to-auto-generate",
+  "DiagnosticsBearerToken": null,
   "ChannelCapacity": 1000,
   "MaxParallelSends": 4,
   "FileWatcherInternalBufferSize": 65536,
@@ -41,6 +59,6 @@
     "LogType": "Csv",
     "FilePathPattern": "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}",
     "LogLevel": "Information",
-    "RetainedFileCountLimit": 14
+    "RetainedDays": 14
   }
 }

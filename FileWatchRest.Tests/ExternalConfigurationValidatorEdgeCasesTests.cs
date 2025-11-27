@@ -1,21 +1,18 @@
-﻿namespace FileWatchRest.Tests;
+namespace FileWatchRest.Tests;
 
-public class ExternalConfigurationValidatorEdgeCasesTests
-{
+public class ExternalConfigurationValidatorEdgeCasesTests {
     [Fact]
-    public void EmptyApiEndpoint_FailsValidation()
-    {
-        var config = new ExternalConfiguration
-        {
-            Folders = new[] { "C:\\temp" },
+    public void EmptyApiEndpointFailsValidation() {
+        var config = new ExternalConfiguration {
+            Folders = [new ExternalConfiguration.WatchedFolderConfig { FolderPath = "C:\\temp" }],
             ApiEndpoint = string.Empty,
             ProcessedFolder = "processed",
             DiagnosticsUrlPrefix = "http://localhost:5005/",
-            AllowedExtensions = new[] { ".txt" },
-            Logging = new LoggingOptions { LogLevel = "Information" }
+            AllowedExtensions = [".txt"],
+            Logging = new SimpleFileLoggerOptions { LogLevel = LogLevel.Information }
         };
 
-        var r = ExternalConfigurationValidator.Validate(config);
+        ValidationResult r = ExternalConfigurationValidator.Validate(config);
         r.IsValid.Should().BeFalse();
         r.Errors.Should().ContainSingle(e => e.PropertyName.Contains("ApiEndpoint"));
     }
@@ -23,38 +20,34 @@ public class ExternalConfigurationValidatorEdgeCasesTests
     [Theory]
     [InlineData(-1)]
     [InlineData(-100)]
-    public void NegativeNumericValues_FailValidation(int badValue)
-    {
-        var config = new ExternalConfiguration
-        {
-            Folders = new[] { "C:\\temp" },
+    public void NegativeNumericValuesFailValidation(int badValue) {
+        var config = new ExternalConfiguration {
+            Folders = [new ExternalConfiguration.WatchedFolderConfig { FolderPath = "C:\\temp" }],
             ApiEndpoint = "http://localhost:8080/api/files",
             ProcessedFolder = "processed",
             DiagnosticsUrlPrefix = "http://localhost:5005/",
-            AllowedExtensions = new[] { ".txt" },
-            Logging = new LoggingOptions { LogLevel = "Information" },
+            AllowedExtensions = [".txt"],
+            Logging = new SimpleFileLoggerOptions { LogLevel = LogLevel.Information },
             DebounceMilliseconds = badValue
         };
 
-        var r = ExternalConfigurationValidator.Validate(config);
+        ValidationResult r = ExternalConfigurationValidator.Validate(config);
         r.IsValid.Should().BeFalse();
         r.Errors.Should().ContainSingle(e => e.PropertyName.Contains("DebounceMilliseconds"));
     }
 
     [Fact]
-    public void AllowedExtensions_BadFormat_FailsValidation()
-    {
-        var config = new ExternalConfiguration
-        {
-            Folders = new[] { "C:\\temp" },
+    public void AllowedExtensionsBadFormatFailsValidation() {
+        var config = new ExternalConfiguration {
+            Folders = [new ExternalConfiguration.WatchedFolderConfig { FolderPath = "C:\\temp" }],
             ApiEndpoint = "http://localhost:8080/api/files",
             ProcessedFolder = "processed",
             DiagnosticsUrlPrefix = "http://localhost:5005/",
-            AllowedExtensions = new[] { "txt", "" },
-            Logging = new LoggingOptions { LogLevel = "Information" }
+            AllowedExtensions = ["txt", ""],
+            Logging = new SimpleFileLoggerOptions { LogLevel = LogLevel.Information }
         };
 
-        var r = ExternalConfigurationValidator.Validate(config);
+        ValidationResult r = ExternalConfigurationValidator.Validate(config);
         r.IsValid.Should().BeFalse();
         r.Errors.Should().Contain(e => e.PropertyName.Contains("AllowedExtensions"));
     }

@@ -1,0 +1,21 @@
+﻿<Project>
+  <PropertyGroup>
+    <!-- Modern C# / .NET 10 defaults -->
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Treat compiler warnings as errors to enforce high quality in CI -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Enable Roslyn analyzers and trimming analysis for NativeAOT readiness -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <TrimMode>link</TrimMode>
+
+    <!-- Use the latest analysis level available in the SDK/analyzers -->
+    <AnalysisLevel>latest</AnalysisLevel>
+  </PropertyGroup>
+
+  <!-- PackageReferences removed here to avoid duplicate-restore issues; prefer per-project references
+       or pin versions in the root csproj. -->
+</Project>
