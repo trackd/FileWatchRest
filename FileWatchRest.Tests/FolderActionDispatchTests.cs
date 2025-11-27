@@ -10,11 +10,18 @@ public class FolderActionDispatchTests {
 
         var configs = new List<ExternalConfiguration.WatchedFolderConfig>
             {
-                new() { FolderPath = "C:/test1", ActionType = ExternalConfiguration.FolderActionType.RestPost },
-                new() { FolderPath = "C:/test2", ActionType = ExternalConfiguration.FolderActionType.PowerShellScript, ScriptPath = "C:/script.ps1" }
+                new() { FolderPath = "C:/test1", ActionName = "rest-action" },
+                new() { FolderPath = "C:/test2", ActionName = "ps-action" }
             };
 
-        manager.ConfigureFolderActions(configs, worker);
+        var globalConfig = new ExternalConfiguration {
+            Actions = [
+                new() { Name = "rest-action", ActionType = ExternalConfiguration.FolderActionType.RestPost },
+                new() { Name = "ps-action", ActionType = ExternalConfiguration.FolderActionType.PowerShellScript, ScriptPath = "C:/script.ps1" }
+            ]
+        };
+
+        manager.ConfigureFolderActions(configs, globalConfig, worker);
 
         System.Reflection.FieldInfo? field = typeof(FileWatcherManager).GetField("_folderActions", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         var dict = (Dictionary<string, List<IFolderAction>>)field!.GetValue(manager)!;

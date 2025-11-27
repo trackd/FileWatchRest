@@ -67,13 +67,9 @@ public class ConfigurationReloadTests {
         var config = new ExternalConfiguration {
             Folders =
             [
-                new()
-                {
-                    FolderPath = folderPath,
-                    ActionType = ExternalConfiguration.FolderActionType.PowerShellScript,
-                    ScriptPath = scriptPath
-                }
-            ]
+                new() { FolderPath = folderPath, ActionName = "ps-action" }
+            ],
+            Actions = [ new() { Name = "ps-action", ActionType = ExternalConfiguration.FolderActionType.PowerShellScript, ScriptPath = scriptPath } ]
         };
         ILogger<FileWatcherManager> logger = new LoggerFactory().CreateLogger<FileWatcherManager>();
         var diagnostics = new DiagnosticsService(new LoggerFactory().CreateLogger<DiagnosticsService>(), new OptionsMonitorMock<ExternalConfiguration>());
@@ -87,7 +83,7 @@ public class ConfigurationReloadTests {
             resilienceService: new ResilienceServiceMock(),
             optionsMonitor: new OptionsMonitorMock<ExternalConfiguration>()
         );
-        fileWatcherManager.ConfigureFolderActions(config.Folders, worker);
+        fileWatcherManager.ConfigureFolderActions(config.Folders, config, worker);
 
         // Act: simulate file event
         var fileEvent = new FileEventRecord { Path = "C:\\TestFolder\\file.txt" };

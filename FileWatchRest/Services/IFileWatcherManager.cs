@@ -13,8 +13,8 @@ public interface IFileWatcherManager : IDisposable {
     /// <param name="onError">Callback for watcher errors</param>
     /// <param name="onExceededRestartAttempts">Callback when restart attempts exceeded</param>
     Task StartWatchingAsync(
-        IEnumerable<string> folders,
-        ExternalConfiguration config,
+        IEnumerable<ExternalConfiguration.WatchedFolderConfig> folders,
+        ExternalConfiguration globalConfig,
         FileSystemEventHandler onChanged,
         Action<string, ErrorEventArgs>? onError,
         Action<string>? onExceededRestartAttempts = null);
@@ -29,5 +29,5 @@ public interface IFileWatcherManager : IDisposable {
     /// </summary>
     /// <param name="configs"></param>
     /// <param name="worker"></param>
-    void ConfigureFolderActions(List<ExternalConfiguration.WatchedFolderConfig> configs, Worker worker);
+    void ConfigureFolderActions(List<ExternalConfiguration.WatchedFolderConfig> configs, ExternalConfiguration globalConfig, Worker worker);
 }

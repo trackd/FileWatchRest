@@ -523,15 +523,19 @@ public class EndToEndIntegrationTests : IDisposable {
 
         // Create test configuration
         var config = new ExternalConfiguration {
-            Folders = [new ExternalConfiguration.WatchedFolderConfig { FolderPath = _testDirectory }],
-            ApiEndpoint = serverUrl,
-            PostFileContents = true,
+            Folders = [new ExternalConfiguration.WatchedFolderConfig { FolderPath = _testDirectory, ActionName = "TestAction" }],
+            Actions = [new ExternalConfiguration.ActionConfig {
+                Name = "TestAction",
+                ActionType = ExternalConfiguration.FolderActionType.RestPost,
+                ApiEndpoint = serverUrl,
+                PostFileContents = true,
+                AllowedExtensions = [".txt"],
+                IncludeSubdirectories = false,
+                MoveProcessedFiles = false
+            }],
             DebounceMilliseconds = 100, // Short debounce for testing
             Retries = 1,
-            RetryDelayMilliseconds = 100,
-            AllowedExtensions = [".txt"],
-            IncludeSubdirectories = false,
-            MoveProcessedFiles = false
+            RetryDelayMilliseconds = 100
         };
 
         // For this test, we'll use a different approach - create the config in AppData
@@ -639,15 +643,19 @@ public class EndToEndIntegrationTests : IDisposable {
 
         // Create test configuration (PostFileContents = false)
         var config = new ExternalConfiguration {
-            Folders = [new ExternalConfiguration.WatchedFolderConfig { FolderPath = _testDirectory }],
-            ApiEndpoint = serverUrl,
-            PostFileContents = false, // Metadata only
+            Folders = [new ExternalConfiguration.WatchedFolderConfig { FolderPath = _testDirectory, ActionName = "TestAction" }],
+            Actions = [new ExternalConfiguration.ActionConfig {
+                Name = "TestAction",
+                ActionType = ExternalConfiguration.FolderActionType.RestPost,
+                ApiEndpoint = serverUrl,
+                PostFileContents = false, // Metadata only
+                AllowedExtensions = [".txt"],
+                IncludeSubdirectories = false,
+                MoveProcessedFiles = false
+            }],
             DebounceMilliseconds = 100,
             Retries = 1,
-            RetryDelayMilliseconds = 100,
-            AllowedExtensions = [".txt"],
-            IncludeSubdirectories = false,
-            MoveProcessedFiles = false
+            RetryDelayMilliseconds = 100
         };
 
         // Create config in AppData for this test

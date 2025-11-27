@@ -25,11 +25,14 @@ public class WorkerMoveProcessedTests : IDisposable {
         var config = new ExternalConfiguration {
             ProcessedFolder = "processed",
             MoveProcessedFiles = true,
-            ApiEndpoint = "http://localhost:8080/api/files",
-            Folders =
-            [
-                new() { FolderPath = _testDirectory, ActionType = ExternalConfiguration.FolderActionType.RestPost }
-            ]
+            Folders = [new() { FolderPath = _testDirectory, ActionName = "TestAction" }],
+            Actions = [new() {
+                Name = "TestAction",
+                ActionType = ExternalConfiguration.FolderActionType.RestPost,
+                ApiEndpoint = "http://localhost:8080/api/files",
+                ProcessedFolder = "processed",
+                MoveProcessedFiles = true
+            }]
         };
 
         var diagService = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new TestUtilities.OptionsMonitorMock<ExternalConfiguration>());
@@ -48,7 +51,7 @@ public class WorkerMoveProcessedTests : IDisposable {
 
         // Act
         System.Reflection.MethodInfo? moveMethod = typeof(Worker).GetMethod("MoveToProcessedFolderAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        object? result = moveMethod?.Invoke(worker, [testFilePath, CancellationToken.None]);
+        object? result = moveMethod?.Invoke(worker, [testFilePath, config, CancellationToken.None]);
         if (result is Task task) {
             await task;
         }
@@ -75,8 +78,9 @@ public class WorkerMoveProcessedTests : IDisposable {
             ApiEndpoint = "http://localhost:8080/api/files",
             Folders =
             [
-                new() { FolderPath = _testDirectory, ActionType = ExternalConfiguration.FolderActionType.RestPost }
-            ]
+                new() { FolderPath = _testDirectory, ActionName = "TestAction" }
+            ],
+            Actions = [ new() { Name = "TestAction", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "http://localhost:8080/api/files" } ]
         };
 
         var diagService = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new TestUtilities.OptionsMonitorMock<ExternalConfiguration>());
@@ -95,11 +99,11 @@ public class WorkerMoveProcessedTests : IDisposable {
 
         System.Reflection.MethodInfo? moveMethod = typeof(Worker).GetMethod("MoveToProcessedFolderAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-        if (moveMethod?.Invoke(worker, [testFile1, CancellationToken.None]) is Task task1) {
+        if (moveMethod?.Invoke(worker, [testFile1, config, CancellationToken.None]) is Task task1) {
             await task1;
         }
 
-        if (moveMethod?.Invoke(worker, [testFile2, CancellationToken.None]) is Task task2) {
+        if (moveMethod?.Invoke(worker, [testFile2, config, CancellationToken.None]) is Task task2) {
             await task2;
         }
 
@@ -123,8 +127,9 @@ public class WorkerMoveProcessedTests : IDisposable {
             ApiEndpoint = "http://localhost:8080/api/files",
             Folders =
             [
-                new() { FolderPath = _testDirectory, ActionType = ExternalConfiguration.FolderActionType.RestPost }
-            ]
+                new() { FolderPath = _testDirectory, ActionName = "TestAction" }
+            ],
+            Actions = [ new() { Name = "TestAction", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "http://localhost:8080/api/files" } ]
         };
 
         var diagService = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new TestUtilities.OptionsMonitorMock<ExternalConfiguration>());
@@ -144,7 +149,7 @@ public class WorkerMoveProcessedTests : IDisposable {
         System.Reflection.MethodInfo? moveMethod = typeof(Worker).GetMethod("MoveToProcessedFolderAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
         // Act - Should not throw
-        if (moveMethod?.Invoke(worker, [nonExistentFile, CancellationToken.None]) is Task task) {
+        if (moveMethod?.Invoke(worker, [nonExistentFile, config, CancellationToken.None]) is Task task) {
             await task; // Should complete without exception
         }
 

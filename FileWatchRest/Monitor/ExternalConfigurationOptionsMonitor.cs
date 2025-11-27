@@ -157,7 +157,7 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
                 var list = new List<ExternalConfiguration.WatchedFolderConfig>();
                 foreach (JsonElement it in foldersElem.EnumerateArray()) {
                     if (it.ValueKind == JsonValueKind.String) {
-                        list.Add(new ExternalConfiguration.WatchedFolderConfig { FolderPath = it.GetString() ?? string.Empty, ActionType = ExternalConfiguration.FolderActionType.RestPost });
+                        list.Add(new ExternalConfiguration.WatchedFolderConfig { FolderPath = it.GetString() ?? string.Empty });
                     }
                     else if (it.ValueKind == JsonValueKind.Object) {
                         ExternalConfiguration.WatchedFolderConfig? folderConfig = it.Deserialize(MyJsonContext.Default.WatchedFolderConfig);
@@ -167,6 +167,21 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
                     }
                 }
                 manual.Folders = list;
+            }
+
+            if (doc.RootElement.TryGetProperty("Actions", out JsonElement actionsElem) && actionsElem.ValueKind == JsonValueKind.Array) {
+                var alist = new List<ExternalConfiguration.ActionConfig>();
+                foreach (JsonElement it in actionsElem.EnumerateArray()) {
+                    if (it.ValueKind == JsonValueKind.Object) {
+                        try {
+                            ExternalConfiguration.ActionConfig? ac = it.Deserialize(MyJsonContext.Default.ActionConfig);
+                            if (ac is not null) alist.Add(ac);
+                        }
+                        catch { /* ignore */ }
+                    }
+                }
+
+                manual.Actions = alist;
             }
 
             if (doc.RootElement.TryGetProperty("Logging", out JsonElement loggingElem) && loggingElem.ValueKind == JsonValueKind.Object) {
@@ -230,6 +245,7 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
             cfg.ExcludePatterns ??= [];
             cfg.AllowedExtensions ??= [];
             cfg.Folders ??= [];
+            cfg.Actions ??= [];
             cfg.Logging ??= new SimpleFileLoggerOptions { LogLevel = LogLevel.Information };
         }
 
@@ -252,7 +268,7 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
                 if (doc.RootElement.TryGetProperty("Folders", out JsonElement fe) && fe.ValueKind == JsonValueKind.Array) {
                     foreach (JsonElement it in fe.EnumerateArray()) {
                         if (it.ValueKind == JsonValueKind.String) {
-                            fb.Folders.Add(new ExternalConfiguration.WatchedFolderConfig { FolderPath = it.GetString() ?? string.Empty, ActionType = ExternalConfiguration.FolderActionType.RestPost });
+                            fb.Folders.Add(new ExternalConfiguration.WatchedFolderConfig { FolderPath = it.GetString() ?? string.Empty });
                         }
                         else if (it.ValueKind == JsonValueKind.Object) {
                             ExternalConfiguration.WatchedFolderConfig? fc = it.Deserialize(MyJsonContext.Default.WatchedFolderConfig);
@@ -282,6 +298,15 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
 
                 if (hasDiag && SecureConfigurationHelper.IsTokenEncrypted(cfg.DiagnosticsBearerToken)) {
                     cfg.DiagnosticsBearerToken = SecureConfigurationHelper.DecryptBearerToken(cfg.DiagnosticsBearerToken!);
+                }
+
+                // Per-action tokens: decrypt if needed for runtime
+                if (cfg.Actions is not null) {
+                    foreach (ExternalConfiguration.ActionConfig a in cfg.Actions) {
+                        if (!string.IsNullOrWhiteSpace(a.BearerToken) && SecureConfigurationHelper.IsTokenEncrypted(a.BearerToken)) {
+                            a.BearerToken = SecureConfigurationHelper.DecryptBearerToken(a.BearerToken!);
+                        }
+                    }
                 }
 
                 if ((hasApi && !SecureConfigurationHelper.IsTokenEncrypted(cfg.BearerToken)) || (hasDiag && !SecureConfigurationHelper.IsTokenEncrypted(cfg.DiagnosticsBearerToken))) {
@@ -314,6 +339,21 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
                         CircuitBreakerOpenDurationMilliseconds = cfg.CircuitBreakerOpenDurationMilliseconds,
                         Logging = cfg.Logging
                     };
+                    // Ensure action tokens are encrypted in the saved copy
+                    if (cfg.Actions is not null) {
+                        copy.Actions = [.. cfg.Actions.Select(a => new ExternalConfiguration.ActionConfig {
+                            Name = a.Name,
+                            ActionType = a.ActionType,
+                            ScriptPath = a.ScriptPath,
+                            ExecutablePath = a.ExecutablePath,
+                            Arguments = a.Arguments,
+                            ApiEndpoint = a.ApiEndpoint,
+                            BearerToken = string.IsNullOrWhiteSpace(a.BearerToken) ? a.BearerToken : SecureConfigurationHelper.EnsureTokenIsEncrypted(a.BearerToken),
+                            PostFileContents = a.PostFileContents,
+                            MoveProcessedFiles = a.MoveProcessedFiles,
+                            IncludeSubdirectories = a.IncludeSubdirectories
+                        })];
+                    }
                     await SaveConfigAsync(copy, ct);
                 }
             }

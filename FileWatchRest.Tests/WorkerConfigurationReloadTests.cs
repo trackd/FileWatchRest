@@ -24,8 +24,9 @@ public class WorkerConfigurationReloadTests : IDisposable {
             ApiEndpoint = "http://localhost:8080/api/files",
             Folders =
             [
-                new() { FolderPath = _testDirectory, ActionType = ExternalConfiguration.FolderActionType.RestPost }
-            ]
+                new() { FolderPath = _testDirectory, ActionName = "default" }
+            ],
+            Actions = [ new() { Name = "default", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "http://localhost:8080/api/files" } ]
         };
 
         var optionsMonitor = new SimpleOptionsMonitor<ExternalConfiguration>(initialConfig);
@@ -47,8 +48,9 @@ public class WorkerConfigurationReloadTests : IDisposable {
             ApiEndpoint = "http://localhost:9090/api/files", // Changed endpoint
             Folders =
             [
-                new() { FolderPath = _testDirectory, ActionType = ExternalConfiguration.FolderActionType.RestPost }
-            ]
+                new() { FolderPath = _testDirectory, ActionName = "default" }
+            ],
+            Actions = [ new() { Name = "default", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "http://localhost:9090/api/files" } ]
         };
 
         optionsMonitor.Raise(newConfig);
@@ -70,8 +72,9 @@ public class WorkerConfigurationReloadTests : IDisposable {
             ApiEndpoint = "http://localhost:8080/api/files",
             Folders =
             [
-                new() { FolderPath = _testDirectory, ActionType = ExternalConfiguration.FolderActionType.RestPost }
-            ]
+                new() { FolderPath = _testDirectory, ActionName = "default" }
+            ],
+            Actions = [ new() { Name = "default", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "http://localhost:8080/api/files" } ]
         };
 
         var optionsMonitor = new SimpleOptionsMonitor<ExternalConfiguration>(initialConfig);
@@ -113,8 +116,9 @@ public class WorkerConfigurationReloadTests : IDisposable {
             ApiEndpoint = "http://localhost:8080/api/files",
             Folders =
             [
-                new() { FolderPath = folder1, ActionType = ExternalConfiguration.FolderActionType.RestPost }
-            ]
+                new() { FolderPath = folder1, ActionName = "default" }
+            ],
+            Actions = [ new() { Name = "default", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "http://localhost:8080/api/files" } ]
         };
 
         var optionsMonitor = new SimpleOptionsMonitor<ExternalConfiguration>(initialConfig);
@@ -138,8 +142,9 @@ public class WorkerConfigurationReloadTests : IDisposable {
             ApiEndpoint = "http://localhost:8080/api/files",
             Folders =
             [
-                new() { FolderPath = folder2, ActionType = ExternalConfiguration.FolderActionType.RestPost } // Different folder
-            ]
+                new() { FolderPath = folder2, ActionName = "default" } // Different folder
+            ],
+            Actions = [ new() { Name = "default", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "http://localhost:8080/api/files" } ]
         };
 
         optionsMonitor.Raise(newConfig);
@@ -159,8 +164,9 @@ public class WorkerConfigurationReloadTests : IDisposable {
             ApiEndpoint = "http://localhost:8080/api/files",
             Folders =
             [
-                new() { FolderPath = _testDirectory, ActionType = ExternalConfiguration.FolderActionType.RestPost }
+                new() { FolderPath = _testDirectory, ActionName = "default" }
             ],
+            Actions = [ new() { Name = "default", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "http://localhost:8080/api/files" } ],
             Logging = new SimpleFileLoggerOptions {
                 LogLevel = LogLevel.Warning
             }

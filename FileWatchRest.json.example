@@ -2,26 +2,131 @@
   "Folders": [
     {
       "FolderPath": "C:\\temp\\watch",
-      "ActionType": "RestPost"
+      "ActionName": "RestEndpoint1"
     },
     {
       "FolderPath": "C:\\data\\incoming",
-      "ActionType": "PowerShellScript",
-      "ScriptPath": "C:\\scripts\\process.ps1",
-      "Arguments": [
-        "-Path",
-        "{FilePath}"
-      ]
+      "ActionName": "ObjectScript"
     },
     {
       "FolderPath": "C:\\data\\outgoing",
-      "ActionType": "PowerShellScript",
-      "ScriptPath": "C:\\scripts\\processObject.ps1",
-      "Arguments": [
-        "{FileNotification:json}"
-      ]
+      "ActionName": "ProcessScript"
     }
   ],
+  "Actions": [
+    {
+      "Name": "ProcessScript",
+      "ActionType": "PowerShellScript",
+      "ScriptPath": "C:\\scripts\\process.ps1",
+      "Arguments": ["-Path","{FilePath}"],
+      "IncludeSubdirectories": false,
+      "MoveProcessedFiles": false,
+      "AllowedExtensions": [".txt", ".log"],
+      "ProcessedFolder": "script_processed"
+    },
+    {
+      "Name": "ObjectScript",
+      "ActionType": "PowerShellScript",
+      "ScriptPath": "C:\\scripts\\processObject.ps1",
+      "Arguments": ["{FileNotification:json}"],
+      "IncludeSubdirectories": true,
+      "AllowedExtensions": [".json", ".xml"],
+      "Retries": 5
+    },
+    {
+      "Name": "RestEndpoint1",
+      "ActionType": "RestPost",
+      "ApiEndpoint": "https://api.example.com/files",
+      "BearerToken": "your-bearer-token-here-will-be-encrypted-automatically",
+      "PostFileContents": true,
+      "MoveProcessedFiles": true,
+      "AllowedExtensions": [".pdf", ".docx"],
+      "MaxContentBytes": 10485760,
+      "Retries": 5
+    }
+  ],
+
+  "Examples": {
+    "MinimalRest": {
+      "Folders": [
+        {
+          "FolderPath": "C:\\temp\\watch",
+          "ActionName": "RestDefault"
+        }
+      ],
+      "Actions": [
+        {
+          "Name": "RestDefault",
+          "ActionType": "RestPost",
+          "ApiEndpoint": "https://api.example.com/files"
+        }
+      ]
+    },
+    "PowerShellReusable": {
+      "Folders": [
+        {
+          "FolderPath": "C:\\data\\incoming",
+          "ActionName": "ParseAndTransform"
+        },
+        {
+          "FolderPath": "C:\\data\\incoming\\objects",
+          "ActionName": "ParseAndTransform"
+        }
+      ],
+      "Actions": [
+        {
+          "Name": "ParseAndTransform",
+          "ActionType": "PowerShellScript",
+          "ScriptPath": "C:\\scripts\\processObject.ps1",
+          "Arguments": [
+            "{FileNotification:json}"
+          ],
+          "IncludeSubdirectories": true,
+          "AllowedExtensions": [
+            ".json",
+            ".xml"
+          ]
+        }
+      ]
+    },
+    "MixedActions": {
+      "Folders": [
+        {
+          "FolderPath": "C:\\apps\\drop",
+          "ActionName": "RunExe"
+        },
+        {
+          "FolderPath": "C:\\invoices",
+          "ActionName": "PostInvoices"
+        }
+      ],
+      "Actions": [
+        {
+          "Name": "RunExe",
+          "ActionType": "Executable",
+          "ExecutablePath": "C:\\tools\\processor.exe",
+          "Arguments": [
+            "--input",
+            "{FilePath}"
+          ],
+          "MoveProcessedFiles": true,
+          "ProcessedFolder": "processed_exe"
+        },
+        {
+          "Name": "PostInvoices",
+          "ActionType": "RestPost",
+          "ApiEndpoint": "https://invoices.example.com/upload",
+          "BearerToken": "<encrypted-or-plain-token>",
+          "PostFileContents": true,
+          "AllowedExtensions": [
+            ".pdf",
+            ".docx"
+          ],
+          "Retries": 5
+        }
+      ]
+    }
+  },
   "ApiEndpoint": "https://api.example.com/files",
   "BearerToken": "your-bearer-token-here-will-be-encrypted-automatically",
   "PostFileContents": true,

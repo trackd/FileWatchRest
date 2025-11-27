@@ -30,3 +30,4 @@ Thumbs.db
 .github/prompts/*.md
 Copilot-Processing.md
 format-report.json
+.github/copilot-instructions.md

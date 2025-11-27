@@ -48,4 +48,42 @@ public class DiagnosticsServiceTests2 : IDisposable {
         _service?.Dispose();
         GC.SuppressFinalize(this);
     }
+
+    [Fact]
+    public async Task ConfigEndpointReturnsFullConfiguration_RuntimeLiveConfig() {
+        // Arrange - create a live config and set it on the diagnostics service
+        var cfg = new ExternalConfiguration {
+            Folders = [new() { FolderPath = "C:\\tmp", ActionName = "a1" }],
+            Actions = [new() { Name = "a1", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "https://api.test/" }],
+            ApiEndpoint = "https://api.default/"
+        };
+
+        // Use a simple options monitor mock that returns the cfg
+        var optionsMock = new TestUtilities.OptionsMonitorMock<ExternalConfiguration>();
+        optionsMock.SetCurrentValue(cfg);
+        var diag = new DiagnosticsService(_mockLogger.Object, optionsMock);
+        diag.SetConfiguration(cfg);
+        diag.SetBearerToken(null);
+
+        // pick a free port
+        int port;
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+
+        string prefix = $"http://localhost:{port}/";
+        diag.StartHttpServer(prefix);
+
+        using var client = new HttpClient();
+        HttpResponseMessage resp = await client.GetAsync(prefix + "config");
+        string body = await resp.Content.ReadAsStringAsync();
+
+        Assert.True(resp.IsSuccessStatusCode);
+        Assert.Contains("Folders", body);
+        Assert.Contains("Actions", body);
+        Assert.Contains("a1", body);
+
+        diag.Dispose();
+    }
 }

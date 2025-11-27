@@ -13,29 +13,14 @@ public sealed class ExternalConfigurationValidator {
                 if (string.IsNullOrWhiteSpace(folder.FolderPath)) {
                     errors.Add(new ValidationFailure($"Folders[{i}].FolderPath", "FolderPath must not be empty"));
                 }
-                // Validate ActionType (enum)
-                if (!Enum.IsDefined(folder.ActionType)) {
-                    errors.Add(new ValidationFailure($"Folders[{i}].ActionType", $"Unknown ActionType '{folder.ActionType}'"));
+
+                if (string.IsNullOrWhiteSpace(folder.ActionName)) {
+                    errors.Add(new ValidationFailure($"Folders[{i}].ActionName", "ActionName must be provided for each folder and reference an Action in Actions[]"));
                 }
                 else {
-                    switch (folder.ActionType) {
-                        case ExternalConfiguration.FolderActionType.RestPost:
-                            // No extra validation needed for RestPost
-                            break;
-                        case ExternalConfiguration.FolderActionType.PowerShellScript:
-                            if (string.IsNullOrWhiteSpace(folder.ScriptPath)) {
-                                errors.Add(new ValidationFailure($"Folders[{i}].ScriptPath", "ScriptPath must be provided for PowerShellScript actions"));
-                            }
-
-                            break;
-                        case ExternalConfiguration.FolderActionType.Executable:
-                            if (string.IsNullOrWhiteSpace(folder.ExecutablePath)) {
-                                errors.Add(new ValidationFailure($"Folders[{i}].ExecutablePath", "ExecutablePath must be provided for Executable actions"));
-                            }
-
-                            break;
-                        default:
-                            break;
+                    // Ensure referenced action exists
+                    if (config.Actions?.Any(a => string.Equals(a.Name, folder.ActionName, StringComparison.OrdinalIgnoreCase)) != true) {
+                        errors.Add(new ValidationFailure($"Folders[{i}].ActionName", $"Folder references unknown Action '{folder.ActionName}'"));
                     }
                 }
             }

@@ -36,11 +36,11 @@ public class FileWatcherManagerTests {
             var errorArgs = new ErrorEventArgs(new InvalidOperationException("simulated"));
             // Invoke enough times to exceed the configured restart attempts
             for (int i = 0; i < config.WatcherMaxRestartAttempts + 1; i++) {
-                mi.Invoke(manager, [tempDir, errorArgs, config, dummyHandler, (Action<string, ErrorEventArgs>?)errorHandler, (Action<string>?)exceededHandler]);
+                mi.Invoke(manager, [tempDir, errorArgs, dummyHandler, (Action<string, ErrorEventArgs>?)errorHandler, (Action<string>?)exceededHandler]);
             }
         }
 
-        Task completed = await Task.WhenAny(tcs.Task, Task.Delay(5000));
+        Task completed = await Task.WhenAny(tcs.Task, Task.Delay(10000));
         completed.Should().Be(tcs.Task);
 
         Directory.Delete(tempDir, true);

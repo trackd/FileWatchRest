@@ -57,7 +57,7 @@ public partial class Worker : BackgroundService {
 
         // Configure folder actions from Folders list
         try {
-            _fileWatcherManager.ConfigureFolderActions(CurrentConfig.Folders, this);
+            _fileWatcherManager.ConfigureFolderActions(CurrentConfig.Folders, CurrentConfig, this);
         }
         catch (Exception ex) {
             LoggerDelegates.FailedConfigReload(_logger, ex);
@@ -85,7 +85,6 @@ public partial class Worker : BackgroundService {
         // Enqueue existing files that were added while service was down
         await EnqueueExistingFilesAsync(stoppingToken);
 
-        // Block until cancellation; debounced enqueue tasks will drive processing
         try {
             await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
         }
@@ -98,7 +97,7 @@ public partial class Worker : BackgroundService {
     }
 
     private Task StartWatchingFoldersAsync(List<ExternalConfiguration.WatchedFolderConfig> folders) {
-        return _fileWatcherManager.StartWatchingAsync(folders.Select(f => f.FolderPath), CurrentConfig, OnFileChanged, OnWatcherError, folderPath => {
+        return _fileWatcherManager.StartWatchingAsync(folders, CurrentConfig, OnFileChanged, OnWatcherError, folderPath => {
             // Exceeded restart attempts -> stop application
             LoggerDelegates.WatcherFailedStopping(_logger, folderPath, null);
             _lifetime.StopApplication();
@@ -119,36 +118,39 @@ public partial class Worker : BackgroundService {
             LoggerDelegates.FileRenamed(_logger, oldPath ?? string.Empty, path, null);
         }
 
+        // Determine effective config for this path (merge action with global defaults)
+        ExternalConfiguration cfg = GetConfigForPath(path);
+
         // Exclude files in the processed folder to prevent infinite loops
         string[] pathParts = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (pathParts.Any(part => part.Equals(CurrentConfig.ProcessedFolder, StringComparison.OrdinalIgnoreCase))) {
+        if (pathParts.Any(part => part.Equals(cfg.ProcessedFolder, StringComparison.OrdinalIgnoreCase))) {
             LoggerDelegates.IgnoredFileInProcessed(_logger, path, null);
             return;
         }
 
         // Apply file extension filtering
-        if (CurrentConfig.AllowedExtensions is { Length: > 0 }) {
+        if (cfg.AllowedExtensions is { Length: > 0 }) {
             string extension = Path.GetExtension(path);
-            if (!CurrentConfig.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) {
+            if (!cfg.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) {
                 return;
             }
         }
 
         // Apply exclude pattern filtering
-        if (CurrentConfig.ExcludePatterns is { Length: > 0 }) {
+        if (cfg.ExcludePatterns is { Length: > 0 }) {
             string fileName = Path.GetFileName(path);
 
-            LoggerDelegates.CheckingExcludePatterns(_logger, fileName, CurrentConfig.ExcludePatterns.Length, null);
+            LoggerDelegates.CheckingExcludePatterns(_logger, fileName, cfg.ExcludePatterns.Length, null);
 
             // Use framework-based pattern matcher (System.IO.Enumeration.FileSystemName)
-            string? matchedPattern = FileSystemPatternMatcher.TryMatchAny(fileName, CurrentConfig.ExcludePatterns);
+            string? matchedPattern = FileSystemPatternMatcher.TryMatchAny(fileName, cfg.ExcludePatterns);
             if (matchedPattern is not null) {
                 LoggerDelegates.ExcludedByPattern(_logger, fileName, matchedPattern, null);
                 return;
             }
 
             if (_logger.IsEnabled(LogLevel.Debug)) {
-                LoggerDelegates.NotExcludedPatterns(_logger, fileName, string.Join(", ", CurrentConfig.ExcludePatterns), null);
+                LoggerDelegates.NotExcludedPatterns(_logger, fileName, string.Join(", ", cfg.ExcludePatterns), null);
             }
         }
 
@@ -193,9 +195,10 @@ public partial class Worker : BackgroundService {
                 LoggerDelegates.SkippingAlreadyPosted(_logger, path, null);
                 return;
             }
+            ExternalConfiguration cfg = GetConfigForPath(path);
 
-            if (CurrentConfig.WaitForFileReadyMilliseconds > 0) {
-                bool ready = await WaitForFileReadyAsync(path, ct);
+            if (cfg.WaitForFileReadyMilliseconds > 0) {
+                bool ready = await WaitForFileReadyAsync(path, cfg, ct);
                 if (!ready) {
                     // Configured to discard zero-length files and file remained empty - skip processing
                     _diagnostics.RecordFileEvent(path, false, null);
@@ -203,12 +206,12 @@ public partial class Worker : BackgroundService {
                 }
             }
 
-            FileNotification notification = await CreateNotificationAsync(path, ct);
+            FileNotification notification = await CreateNotificationAsync(path, cfg, ct);
             LoggerDelegates.CreatedNotificationDebug(_logger, path, notification.FileSize, !string.IsNullOrEmpty(notification.Content), null);
-            bool success = await SendNotificationAsync(notification, ct);
+            bool success = await SendNotificationAsync(notification, cfg, ct);
 
-            if (success && CurrentConfig.MoveProcessedFiles) {
-                await MoveToProcessedFolderAsync(path, ct);
+            if (success && cfg.MoveProcessedFiles) {
+                await MoveToProcessedFolderAsync(path, cfg, ct);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) {
@@ -220,10 +223,10 @@ public partial class Worker : BackgroundService {
         }
     }
 
-    internal async Task<bool> WaitForFileReadyAsync(string path, CancellationToken ct) {
+    internal static async Task<bool> WaitForFileReadyAsync(string path, ExternalConfiguration cfg, CancellationToken ct) {
         var sw = Stopwatch.StartNew();
         bool waited = false;
-        int waitMs = Math.Max(0, CurrentConfig.WaitForFileReadyMilliseconds);
+        int waitMs = Math.Max(0, cfg.WaitForFileReadyMilliseconds);
         // Replace with direct logger call or add to LoggerDelegates if needed
 
         while (sw.ElapsedMilliseconds < waitMs) {
@@ -231,7 +234,7 @@ public partial class Worker : BackgroundService {
                 // Try to open for read to ensure the writer has released any exclusive locks
                 using FileStream fs = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
 
-                if (!CurrentConfig.PostFileContents) {
+                if (!cfg.PostFileContents) {
                     // We don't need content - file is considered ready if it can be opened
                     return true;
                 }
@@ -256,7 +259,7 @@ public partial class Worker : BackgroundService {
         }
 
         // If configured to discard zero-length files, indicate caller to skip processing
-        if (CurrentConfig.DiscardZeroByteFiles) {
+        if (cfg.DiscardZeroByteFiles) {
             // Replace with direct logger call or add to LoggerDelegates if needed
             return false;
         }
@@ -265,7 +268,7 @@ public partial class Worker : BackgroundService {
         return true;
     }
 
-    internal ValueTask<FileNotification> CreateNotificationAsync(string path, CancellationToken ct) {
+    internal ValueTask<FileNotification> CreateNotificationAsync(string path, ExternalConfiguration cfg, CancellationToken ct) {
         var fileInfo = new FileInfo(path);
         var notification = new FileNotification {
             Path = path,
@@ -274,19 +277,22 @@ public partial class Worker : BackgroundService {
         };
 
         // Fast path: No content posting - return synchronously to avoid Task allocation
-        if (!CurrentConfig.PostFileContents) {
+        if (!cfg.PostFileContents) {
             return new ValueTask<FileNotification>(notification);
         }
 
         // Async path: Need to read file contents
-        return new ValueTask<FileNotification>(CreateNotificationWithContentAsync(notification, fileInfo, path, ct));
+        return new ValueTask<FileNotification>(CreateNotificationWithContentAsync(notification, fileInfo, path, cfg, ct));
     }
 
+    // Back-compat overload: use current global config
+    internal ValueTask<FileNotification> CreateNotificationAsync(string path, CancellationToken ct) => CreateNotificationAsync(path, CurrentConfig, ct);
+
     private async Task<FileNotification> CreateNotificationWithContentAsync(
-        FileNotification notification, FileInfo fileInfo, string path, CancellationToken ct) {
+        FileNotification notification, FileInfo fileInfo, string path, ExternalConfiguration cfg, CancellationToken ct) {
         try {
             // Enforce a maximum content size to avoid large memory allocations
-            if (fileInfo.Length <= CurrentConfig.MaxContentBytes) {
+            if (fileInfo.Length <= cfg.MaxContentBytes) {
                 // Use ArrayPool for better memory efficiency on larger files
                 if (fileInfo.Length > 4096) // Use pooling for files > 4KB
                 {
@@ -315,7 +321,7 @@ public partial class Worker : BackgroundService {
                 }
             }
             else {
-                LoggerDelegates.FileExceedsMaxContentWarning(_logger, path, CurrentConfig.MaxContentBytes, null);
+                LoggerDelegates.FileExceedsMaxContentWarning(_logger, path, cfg.MaxContentBytes, null);
                 notification.Content = null; // Do not include contents that exceed the configured limit
             }
         }
@@ -332,8 +338,8 @@ public partial class Worker : BackgroundService {
     /// </summary>
     /// <param name="notification"></param>
     /// <returns></returns>
-    internal bool ShouldUseStreamingUpload(FileNotification notification) {
-        if (!CurrentConfig.PostFileContents) {
+    internal static bool ShouldUseStreamingUpload(FileNotification notification, ExternalConfiguration cfg) {
+        if (!cfg.PostFileContents) {
             return false;
         }
 
@@ -342,12 +348,17 @@ public partial class Worker : BackgroundService {
         }
 
         long size = notification.FileSize.Value;
-        long threshold = Math.Max(0, CurrentConfig.StreamingThresholdBytes);
-        return size > threshold && size <= CurrentConfig.MaxContentBytes;
+        long threshold = Math.Max(0, cfg.StreamingThresholdBytes);
+        return size > threshold && size <= cfg.MaxContentBytes;
     }
 
-    internal async Task<bool> SendNotificationAsync(FileNotification notification, CancellationToken ct) {
-        if (string.IsNullOrWhiteSpace(CurrentConfig.ApiEndpoint)) {
+    // Back-compat overloads for tests and callers that expect no-config variants
+    internal bool ShouldUseStreamingUpload(FileNotification notification) => ShouldUseStreamingUpload(notification, CurrentConfig);
+
+    internal Task<bool> SendNotificationAsync(FileNotification notification, CancellationToken ct) => SendNotificationAsync(notification, CurrentConfig, ct);
+
+    internal async Task<bool> SendNotificationAsync(FileNotification notification, ExternalConfiguration cfg, CancellationToken ct) {
+        if (string.IsNullOrWhiteSpace(cfg.ApiEndpoint)) {
             LoggerDelegates.ApiEndpointNotConfigured(_logger, notification.Path, null);
             return false;
         }
@@ -357,7 +368,7 @@ public partial class Worker : BackgroundService {
         // Prepare a factory to create a fresh HttpRequestMessage for each attempt so streaming content is created per attempt.
         Task<HttpRequestMessage> requestFactory(CancellationToken ct) {
             // Decide sending strategy: use streaming upload when appropriate
-            if (ShouldUseStreamingUpload(notification)) {
+            if (ShouldUseStreamingUpload(notification, cfg)) {
                 var metadataObj = new UploadMetadata {
                     Path = notification.Path,
                     FileSize = notification.FileSize,
@@ -379,15 +390,15 @@ public partial class Worker : BackgroundService {
                     streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
                     multipart.Add(streamContent, "file", Path.GetFileName(notification.Path));
 
-                    var reqMsg = new HttpRequestMessage(HttpMethod.Post, CurrentConfig.ApiEndpoint) { Content = multipart };
-                    if (!string.IsNullOrWhiteSpace(CurrentConfig.BearerToken)) {
-                        string token = CurrentConfig.BearerToken;
+                    var reqMsg = new HttpRequestMessage(HttpMethod.Post, cfg.ApiEndpoint) { Content = multipart };
+                    if (!string.IsNullOrWhiteSpace(cfg.BearerToken)) {
+                        string token = cfg.BearerToken;
                         if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) {
                             token = token[7..].Trim();
                         }
 
                         reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                        LoggerDelegates.AttachingAuthDebug(_logger, CurrentConfig.ApiEndpoint ?? string.Empty, token, null);
+                        LoggerDelegates.AttachingAuthDebug(_logger, cfg.ApiEndpoint ?? string.Empty, token, null);
                     }
 
                     // Use Activity API for W3C distributed tracing
@@ -395,7 +406,7 @@ public partial class Worker : BackgroundService {
                     activity?.SetTag("file.path", notification.Path);
                     activity?.SetTag("file.size", notification.FileSize);
                     activity?.SetTag("http.method", "POST");
-                    activity?.SetTag("http.url", CurrentConfig.ApiEndpoint);
+                    activity?.SetTag("http.url", cfg.ApiEndpoint);
 
                     // W3C trace context is automatically propagated by HttpClient when Activity is active
                     return Task.FromResult(reqMsg);
@@ -410,15 +421,15 @@ public partial class Worker : BackgroundService {
                 var ms = new MemoryStream(bytes, writable: false);
                 var content = new StreamContent(ms);
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-                var reqMsg = new HttpRequestMessage(HttpMethod.Post, CurrentConfig.ApiEndpoint) { Content = content };
-                if (!string.IsNullOrWhiteSpace(CurrentConfig.BearerToken)) {
-                    string token = CurrentConfig.BearerToken;
+                var reqMsg = new HttpRequestMessage(HttpMethod.Post, cfg.ApiEndpoint) { Content = content };
+                if (!string.IsNullOrWhiteSpace(cfg.BearerToken)) {
+                    string token = cfg.BearerToken;
                     if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) {
                         token = token[7..].Trim();
                     }
 
                     reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                    LoggerDelegates.AttachingAuthDebug(_logger, CurrentConfig.ApiEndpoint ?? string.Empty, token, null);
+                    LoggerDelegates.AttachingAuthDebug(_logger, cfg.ApiEndpoint ?? string.Empty, token, null);
                 }
                 // Correlate request with a unique id for tracing
                 string requestId = Guid.NewGuid().ToString("N");
@@ -430,9 +441,10 @@ public partial class Worker : BackgroundService {
             }
         }
 
-        string endpointKey = string.IsNullOrWhiteSpace(CurrentConfig.ApiEndpoint) ? string.Empty : CurrentConfig.ApiEndpoint;
+        string endpointKey = string.IsNullOrWhiteSpace(cfg.ApiEndpoint) ? string.Empty : cfg.ApiEndpoint;
 
-        ResilienceResult result = await _resilienceService.SendWithRetriesAsync(requestFactory, fileClient, endpointKey, CurrentConfig, ct);
+        // Use merged configuration directly (no conversion needed)
+        ResilienceResult result = await _resilienceService.SendWithRetriesAsync(requestFactory, fileClient, endpointKey, cfg, ct);
 
         // Diagnostics and logging for this file are recorded here using the worker's notification path
         _diagnostics.RecordFileEvent(notification.Path, result.Success, result.LastStatusCode);
@@ -471,10 +483,10 @@ public partial class Worker : BackgroundService {
         return false;
     }
 
-    private Task MoveToProcessedFolderAsync(string filePath, CancellationToken ct) {
+    private Task MoveToProcessedFolderAsync(string filePath, ExternalConfiguration cfg, CancellationToken ct) {
         try {
             string directory = Path.GetDirectoryName(filePath)!;
-            string processedDir = Path.Combine(directory, CurrentConfig.ProcessedFolder);
+            string processedDir = Path.Combine(directory, cfg.ProcessedFolder);
 
             Directory.CreateDirectory(processedDir);
 
@@ -517,7 +529,7 @@ public partial class Worker : BackgroundService {
 
             // Rebuild folder action mapping for new configuration
             // Reconfigure folder actions from Folders list
-            _fileWatcherManager.ConfigureFolderActions(newConfig.Folders, this);
+            _fileWatcherManager.ConfigureFolderActions(newConfig.Folders, newConfig, this);
 
             // Stop current watchers via manager
             await _fileWatcherManager.StopAllAsync();
@@ -574,6 +586,82 @@ public partial class Worker : BackgroundService {
         }
     }
 
+
+
+    /// <summary>
+    /// Get the effective configuration for a file path by merging action settings with global defaults.
+    /// Precedence: action-level setting > global default.
+    /// </summary>
+    private ExternalConfiguration GetConfigForPath(string path) {
+        // Find the most specific matching folder (longest path) that is a prefix of the file path
+        ExternalConfiguration.WatchedFolderConfig? folder = null;
+        string normalized = Path.GetFullPath(path);
+
+        foreach (ExternalConfiguration.WatchedFolderConfig f in CurrentConfig.Folders) {
+            if (string.IsNullOrWhiteSpace(f.FolderPath)) continue;
+            string folderFull;
+            try { folderFull = Path.GetFullPath(f.FolderPath); } catch { continue; }
+            if (!normalized.StartsWith(folderFull, StringComparison.OrdinalIgnoreCase)) continue;
+            if (folder is null || folderFull.Length > folder.FolderPath.Length) folder = f;
+        }
+
+        // If no folder match, return global config as-is
+        if (folder is null) return CurrentConfig;
+
+        // Resolve the action configuration
+        ExternalConfiguration.ActionConfig? action = null;
+        if (!string.IsNullOrWhiteSpace(folder.ActionName) && CurrentConfig.Actions is not null) {
+            action = CurrentConfig.Actions.FirstOrDefault(a =>
+                string.Equals(a.Name, folder.ActionName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // If no action found, return global config as-is
+        if (action is null) return CurrentConfig;
+
+        // Merge action settings with global defaults
+        return new ExternalConfiguration {
+            // Action-specific settings (REST API)
+            ApiEndpoint = action.ApiEndpoint ?? CurrentConfig.ApiEndpoint,
+            BearerToken = action.BearerToken ?? CurrentConfig.BearerToken,
+
+            // File processing behavior
+            PostFileContents = action.PostFileContents ?? CurrentConfig.PostFileContents,
+            MoveProcessedFiles = action.MoveProcessedFiles ?? CurrentConfig.MoveProcessedFiles,
+            ProcessedFolder = action.ProcessedFolder ?? CurrentConfig.ProcessedFolder,
+            AllowedExtensions = action.AllowedExtensions ?? CurrentConfig.AllowedExtensions,
+            ExcludePatterns = action.ExcludePatterns ?? CurrentConfig.ExcludePatterns,
+            IncludeSubdirectories = action.IncludeSubdirectories ?? CurrentConfig.IncludeSubdirectories,
+
+            // Timing and retry settings
+            DebounceMilliseconds = action.DebounceMilliseconds ?? CurrentConfig.DebounceMilliseconds,
+            Retries = action.Retries ?? CurrentConfig.Retries,
+            RetryDelayMilliseconds = action.RetryDelayMilliseconds ?? CurrentConfig.RetryDelayMilliseconds,
+            WaitForFileReadyMilliseconds = action.WaitForFileReadyMilliseconds ?? CurrentConfig.WaitForFileReadyMilliseconds,
+
+            // Content size settings
+            MaxContentBytes = action.MaxContentBytes ?? CurrentConfig.MaxContentBytes,
+            StreamingThresholdBytes = action.StreamingThresholdBytes ?? CurrentConfig.StreamingThresholdBytes,
+            DiscardZeroByteFiles = action.DiscardZeroByteFiles ?? CurrentConfig.DiscardZeroByteFiles,
+
+            // Circuit breaker settings
+            EnableCircuitBreaker = action.EnableCircuitBreaker ?? CurrentConfig.EnableCircuitBreaker,
+            CircuitBreakerFailureThreshold = action.CircuitBreakerFailureThreshold ?? CurrentConfig.CircuitBreakerFailureThreshold,
+            CircuitBreakerOpenDurationMilliseconds = action.CircuitBreakerOpenDurationMilliseconds ?? CurrentConfig.CircuitBreakerOpenDurationMilliseconds,
+
+            // Global-only settings (never overridden by actions)
+            Folders = CurrentConfig.Folders,
+            Actions = CurrentConfig.Actions ?? [],
+            WatcherMaxRestartAttempts = CurrentConfig.WatcherMaxRestartAttempts,
+            WatcherRestartDelayMilliseconds = CurrentConfig.WatcherRestartDelayMilliseconds,
+            ChannelCapacity = CurrentConfig.ChannelCapacity,
+            MaxParallelSends = CurrentConfig.MaxParallelSends,
+            FileWatcherInternalBufferSize = CurrentConfig.FileWatcherInternalBufferSize,
+            DiagnosticsUrlPrefix = CurrentConfig.DiagnosticsUrlPrefix,
+            DiagnosticsBearerToken = CurrentConfig.DiagnosticsBearerToken,
+            Logging = CurrentConfig.Logging
+        };
+    }
+
     /// <summary>
     /// Scan configured folders for existing files on startup and enqueue them for processing.
     /// This handles the scenario where files were added while the service was down.
@@ -592,26 +680,28 @@ public partial class Worker : BackgroundService {
                     continue;
                 }
 
-                IEnumerable<string> files = Directory.EnumerateFiles(folderPath, "*", SearchOption.TopDirectoryOnly);
-                foreach (string filePath in files) {
+                foreach (string filePath in Directory.EnumerateFiles(folderPath, "*", SearchOption.TopDirectoryOnly)) {
+                    // Use GetConfigForPath to get merged action + global configuration
+                    ExternalConfiguration cfg = GetConfigForPath(filePath);
+
                     // Exclude files in processed folder
                     string[] pathParts = filePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                    if (pathParts.Any(part => part.Equals(CurrentConfig.ProcessedFolder, StringComparison.OrdinalIgnoreCase))) {
+                    if (pathParts.Any(part => part.Equals(cfg.ProcessedFolder, StringComparison.OrdinalIgnoreCase))) {
                         continue;
                     }
 
                     // Apply file extension filtering
-                    if (CurrentConfig.AllowedExtensions is { Length: > 0 }) {
+                    if (cfg.AllowedExtensions is { Length: > 0 }) {
                         string extension = Path.GetExtension(filePath);
-                        if (!CurrentConfig.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) {
+                        if (!cfg.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) {
                             continue;
                         }
                     }
 
                     // Apply exclude pattern filtering
-                    if (CurrentConfig.ExcludePatterns is { Length: > 0 }) {
+                    if (cfg.ExcludePatterns is { Length: > 0 }) {
                         string fileName = Path.GetFileName(filePath);
-                        string? matchedPattern = FileSystemPatternMatcher.TryMatchAny(fileName, CurrentConfig.ExcludePatterns);
+                        string? matchedPattern = FileSystemPatternMatcher.TryMatchAny(fileName, cfg.ExcludePatterns);
                         if (matchedPattern is not null) {
                             continue;
                         }

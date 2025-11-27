@@ -1,7 +1,34 @@
-// Resolve external config (primary and only source) and load logging options from it.
+// Resolve external config path. Priority:
+// 1) Command-line: --config <path> or -c <path> or first positional arg
+// 2) Environment variable FILEWATCHREST_CONFIG
+// 3) Default under CommonApplicationData
+string? explicitConfig = null;
+if (args?.Length > 0) {
+    for (int i = 0; i < args.Length; i++) {
+        if (string.Equals(args[i], "--config", StringComparison.OrdinalIgnoreCase) || string.Equals(args[i], "-c", StringComparison.OrdinalIgnoreCase)) {
+            if (i + 1 < args.Length && !string.IsNullOrWhiteSpace(args[i + 1])) {
+                explicitConfig = args[i + 1];
+                break;
+            }
+        }
+    }
+
+    if (explicitConfig is null && args.Length > 0 && File.Exists(args[0])) {
+        explicitConfig = args[0];
+    }
+}
+
+if (string.IsNullOrWhiteSpace(explicitConfig)) {
+    string? envCfg = Environment.GetEnvironmentVariable("FILEWATCHREST_CONFIG");
+    if (!string.IsNullOrWhiteSpace(envCfg)) {
+        explicitConfig = envCfg;
+    }
+}
+
+// Compute program data/service dir once only if we need the default path or for logging
 string programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
 string serviceDir = Path.Combine(programData, "FileWatchRest");
-string externalConfigPath = Path.Combine(serviceDir, "FileWatchRest.json");
+string externalConfigPath = explicitConfig ?? Path.Combine(serviceDir, "FileWatchRest.json");
 
 SimpleFileLoggerOptions? loggingOptions = null;
 if (File.Exists(externalConfigPath)) {

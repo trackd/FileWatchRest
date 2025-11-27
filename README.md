@@ -57,20 +57,35 @@ The service uses a single JSON configuration file for all settings:
 This file is created automatically with defaults and can be edited while the service is running.  
 Changes are detected automatically and applied without restarting the service.  
 
-Example configuration (typed `Folders`):
+Example configuration (typed `Folders` + `Actions`):
 
 ```json
 {
   "Folders": [
     {
       "FolderPath": "C:\\temp\\watch",
-      "ActionType": "RestPost"
+      "ActionName": "RestEndpoint1"
     },
     {
       "FolderPath": "C:\\data\\incoming",
+      "ActionName": "ObjectScript"
+    }
+  ],
+  "Actions": [
+    {
+      "Name": "RestEndpoint1",
+      "ActionType": "RestPost",
+      "ApiEndpoint": "https://api.example.com/files",
+      "BearerToken": "your-bearer-token-here"
+    },
+    {
+      "Name": "ObjectScript",
       "ActionType": "PowerShellScript",
-      "ScriptPath": "C:\\scripts\\process.ps1",
-      "Arguments": ["-Verbose"]
+      "ScriptPath": "C:\\scripts\\processObject.ps1",
+      "Arguments": [
+        "{FileNotification:json}"
+      ],
+      "IncludeSubdirectories": true
     }
   ],
   "ApiEndpoint": "https://api.example.com/files",
@@ -101,7 +116,6 @@ Example configuration (typed `Folders`):
   "EnableCircuitBreaker": false,
   "CircuitBreakerFailureThreshold": 5,
   "CircuitBreakerOpenDurationMilliseconds": 30000,
-
   "Logging": {
     "LogType": "Csv",
     "FilePathPattern": "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}",
@@ -109,20 +123,149 @@ Example configuration (typed `Folders`):
     "RetainedDays": 14
   }
 }
+
+Config file overrides
+
+You can override the default configuration file path when starting the service or in your environment:
+
+- **Command-line:** pass `--config <path>` or `-c <path>` to specify the configuration file to use.
+- **Environment variable:** set `FILEWATCHREST_CONFIG` to a file path and it will be used when no `--config` arg is provided.
+
+If neither is provided the service falls back to the default file under `$env:ProgramData\FileWatchRest\FileWatchRest.json`.
 ```
+
+## Additional Configuration Examples
+
+Below are a few small example configurations demonstrating common patterns (minimal REST action, reusable PowerShell action, mixed action types, and legacy string-array folders). These are provided here for convenience; the full runnable example is in `FileWatchRest.json.example`.  
+
+### 1) Minimal single REST action (simple)
+
+```json
+{
+  "Folders": [
+    { 
+      "FolderPath": "C:\\temp\\watch", 
+      "ActionName": "RestDefault" 
+    }
+  ],
+  "Actions": [
+    {
+      "Name": "RestDefault",
+      "ActionType": "RestPost",
+      "ApiEndpoint": "https://api.example.com/files"
+    }
+  ]
+}
+```
+
+### 2) PowerShell script per-folder (reusable actions)
+
+```json
+{
+  "Folders": [
+    { 
+      "FolderPath": "C:\\data\\incoming", 
+      "ActionName": "ParseAndTransform" 
+    },
+    { 
+      "FolderPath": "C:\\data\\incoming\\objects", 
+      "ActionName": "ParseAndTransform" 
+    }
+  ],
+  "Actions": [
+    {
+      "Name": "ParseAndTransform",
+      "ActionType": "PowerShellScript",
+      "ScriptPath": "C:\\scripts\\processObject.ps1",
+      "Arguments": ["{FileNotification:json}"],
+      "IncludeSubdirectories": true,
+      "AllowedExtensions": [".json", ".xml"]
+    }
+  ]
+}
+```
+
+### 3) Mixed action types: script, executable, and REST with per-action overrides
+
+```json
+{
+  "Folders": [
+    { 
+      "FolderPath": "C:\\apps\\drop", 
+      "ActionName": "RunExe" 
+    },
+    { 
+      "FolderPath": "C:\\invoices", 
+      "ActionName": "PostInvoices" 
+    }
+  ],
+  "Actions": [
+    {
+      "Name": "RunExe",
+      "ActionType": "Executable",
+      "ExecutablePath": "C:\\tools\\processor.exe",
+      "Arguments": ["--input", "{FilePath}"],
+      "MoveProcessedFiles": true,
+      "ProcessedFolder": "processed_exe"
+    },
+    {
+      "Name": "PostInvoices",
+      "ActionType": "RestPost",
+      "ApiEndpoint": "https://invoices.example.com/upload",
+      "BearerToken": "<encrypted-or-plain-token>",
+      "PostFileContents": true,
+      "AllowedExtensions": [".pdf", ".docx"],
+      "Retries": 5
+    }
+  ]
+}
+```
+
+### 4) Legacy compatible: string-array `Folders` (migration)
+
+The monitor accepts the legacy `Folders: ["C:\\path"]` string-array format and will migrate it into the typed object format during load. Prefer the typed object form for clarity and reusability.  
 
 Configuration Options  
   
 **Core File Watching Settings:**  
 
-- `Folders`: Array of typed folder objects. Each entry is an object with at least `FolderPath` and optional `ActionType` (one of `RestPost`, `Executable`, `PowerShellScript`) and action-specific fields such as `ExecutablePath`, `ScriptPath`, `Arguments`, and `AdditionalHeaders`. Example:
+- `Folders`: Array of typed folder objects. Each entry must include `FolderPath` and a reference to a named action via `ActionName`. Folders are lightweight mappings that reference reusable `Actions[]` entries which define processing behavior. Example:
 
 ```json
 "Folders": [
-  { "FolderPath": "C:\\temp\\watch", "ActionType": "RestPost" },
-  { "FolderPath": "C:\\data\\incoming", "ActionType": "Executable", "ExecutablePath": "C:\\tools\\proc.exe" }
+  {
+    "FolderPath": "C:\\temp\\watch",
+    "ActionName": "RestEndpoint1"
+  },
+  {
+    "FolderPath": "C:\\data\\incoming",
+    "ActionName": "ObjectScript"
+  }
 ]
 ```
+
+- `Actions`: Array of named `ActionConfig` objects. Each action is a complete, reusable processing configuration (action type, script/executable paths, REST endpoint, bearer token, file handling options, retries, circuit breaker settings, etc.). Example:
+
+```json
+"Actions": [
+  {
+    "Name": "RestEndpoint1",
+    "ActionType": "RestPost",
+    "ApiEndpoint": "https://api.example.com/files"
+  },
+  {
+    "Name": "ObjectScript",
+    "ActionType": "PowerShellScript",
+    "ScriptPath": "C:\\scripts\\processObject.ps1"
+  }
+]
+```
+
+Precedence and overrides:
+
+- Settings defined on an `ActionConfig` override global settings in the root object for folders that reference that action.
+- Global settings (top-level keys such as `ApiEndpoint`, `Retries`, `MoveProcessedFiles`, etc.) provide defaults that apply when the `ActionConfig` does not set a specific value.
+- `Folders` are intentionally lightweight (path + `ActionName`) to encourage reuse and centralized action configuration.
 - `ApiEndpoint`: HTTP endpoint to POST file notifications to
 - `BearerToken`: Bearer token for API authentication. **Automatically encrypted** using
   machine-specific encryption when saved. Plain text tokens are automatically encrypted on first  
@@ -428,47 +571,3 @@ Configuration Management
 - Default configuration is created automatically on first run
 - Configuration file can be edited manually or through automated deployment scripts
 - No need for separate `appsettings.json` modifications
-
-Architecture and Modern Patterns  
-
-The service follows modern .NET architecture patterns:
-
-**BackgroundService Pattern:**  
-
-- `FileDebounceService`: Dedicated service for debouncing file events
-- `FileSenderService`: Dedicated service for parallel HTTP sending
-- `Worker`: Orchestration service managing the overall workflow
-- All services properly implement `StartAsync`/`StopAsync` lifecycle
-
-**Performance Optimizations:**  
-
-- `ArrayPool<T>` for memory-efficient buffer management
-- Bounded channels for backpressure handling
-- Streaming uploads for large files (multipart/form-data)
-- LoggerMessage source generators for zero-allocation logging
-
-**Resilience and Reliability:**  
-
-- `HttpResilienceService`: Configurable retry logic with exponential backoff
-- Circuit breaker pattern to protect downstream services
-- File watcher restart mechanisms with backoff
-- Configuration hot-reload without service restart
-
-**Testing and Quality:**  
-
-- 123 comprehensive tests with xUnit
-- Integration tests for end-to-end workflows
-- Reflection-based testing of internal methods
-- Code coverage tracking (66% Worker.cs, 89% FileWatcherManager)
-
-Coding standards & developer tooling  
-  
-- CI runs on GitHub Actions (see `.github/workflows/ci.yml`) and performs restore, build, tests and
-  a format check. The CI will also fail if any file-level using directives are present (via the  
-  repository `Directory.Build.targets` enforcement).  
-
-If a build error points out a file-level using, move that using to `FileWatchRest/GlobalUsings.cs`  
-and re-run the build or format tools.  
-
-FileWatchRest - Modern file watching service with REST API integration  
-----------------------------------------------------------------------  

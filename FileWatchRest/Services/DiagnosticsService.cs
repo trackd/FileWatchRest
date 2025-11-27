@@ -230,7 +230,7 @@ public class DiagnosticsService : IDiagnosticsService {
                     if (config is not null) {
                         // Export as an ExternalConfiguration-shaped object so callers that
                         // deserialize into ExternalConfiguration (tests) receive the
-                        // normalized typed `Folders` list used at runtime.
+                        // normalized typed `Folders` list and `Actions` used at runtime.
                         var export = new ExternalConfiguration {
                             ApiEndpoint = config.ApiEndpoint,
                             BearerToken = config.BearerToken,
@@ -248,7 +248,9 @@ public class DiagnosticsService : IDiagnosticsService {
                             FileWatcherInternalBufferSize = config.FileWatcherInternalBufferSize,
                             Logging = config.Logging,
                             // Export typed folders list so callers receive the normalized runtime shape
-                            Folders = config.Folders ?? []
+                            Folders = config.Folders ?? [],
+                            // Export per-action configurations as well
+                            Actions = config.Actions ?? []
                         };
 
                         responseText = JsonSerializer.Serialize(export, typeof(ExternalConfiguration), MyJsonContext.Default);

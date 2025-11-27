@@ -4,7 +4,8 @@ public class ExternalConfigurationValidatorTests {
     [Fact]
     public void ValidConfigurationPassesValidation() {
         var config = new ExternalConfiguration {
-            Folders = [new ExternalConfiguration.WatchedFolderConfig { FolderPath = "C:\\temp" }],
+            Folders = [new ExternalConfiguration.WatchedFolderConfig { FolderPath = "C:\\temp", ActionName = "default" }],
+            Actions = [ new ExternalConfiguration.ActionConfig { Name = "default", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "http://localhost:8080/api/files" } ],
             ApiEndpoint = "http://localhost:8080/api/files",
             ProcessedFolder = "processed",
             DiagnosticsUrlPrefix = "http://localhost:5005/",
@@ -39,7 +40,8 @@ public class ExternalConfigurationValidatorTests {
     [Fact]
     public void InvalidApiEndpointFailsValidation() {
         var config = new ExternalConfiguration {
-            Folders = [new ExternalConfiguration.WatchedFolderConfig { FolderPath = "C:\\temp" }],
+            Folders = [new ExternalConfiguration.WatchedFolderConfig { FolderPath = "C:\\temp", ActionName = "default" }],
+            Actions = [ new ExternalConfiguration.ActionConfig { Name = "default", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "http://localhost:8080/api/files" } ],
             ApiEndpoint = "not-a-valid-uri",
             ProcessedFolder = "processed",
             DiagnosticsUrlPrefix = "http://localhost:5005/",
