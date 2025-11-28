@@ -23,7 +23,23 @@ public class ExecutableAction(string executablePath, List<string>? arguments, IL
         }
 
         ProcessStartInfo exec = CreateProcessStartInfo(fileEvent);
-        using var proc = Process.Start(exec);
+        Process? proc = null;
+        try {
+            proc = Process.Start(exec);
+        }
+        catch (UnauthorizedAccessException uex) {
+            if (_logger.IsEnabled(LogLevel.Error)) {
+                LoggerDelegates.ExecutableAccessDenied(_logger, _executablePath, uex);
+            }
+            return;
+        }
+        catch (Exception ex) {
+            if (_logger.IsEnabled(LogLevel.Error)) {
+                LoggerDelegates.ExecutableStartFailed(_logger, _executablePath, ex);
+            }
+            return;
+        }
+
         if (proc is null) return;
 
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -61,6 +77,9 @@ public class ExecutableAction(string executablePath, List<string>? arguments, IL
             if (_logger.IsEnabled(LogLevel.Warning)) {
                 LoggerDelegates.ExecutableTimeout(_logger, _executablePath, _executionTimeoutMilliseconds ?? 0, null);
             }
+        }
+        finally {
+            try { proc.Dispose(); } catch { }
         }
     }
     internal ProcessStartInfo CreateProcessStartInfo(FileEventRecord fileEvent) {

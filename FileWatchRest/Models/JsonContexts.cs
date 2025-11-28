@@ -28,6 +28,8 @@ public class ErrorResponse {
 [JsonSerializable(typeof(FileNotification))]
 [JsonSerializable(typeof(ExternalConfiguration))]
 [JsonSerializable(typeof(ExternalConfiguration.WatchedFolderConfig))]
+[JsonSerializable(typeof(ExternalConfiguration.ActionConfig))]
+[JsonSerializable(typeof(ExternalConfiguration.FolderActionType))]
 [JsonSerializable(typeof(SimpleFileLoggerOptions))]
 [JsonSerializable(typeof(LogType))]
 [JsonSerializable(typeof(LogWriteEntry))]

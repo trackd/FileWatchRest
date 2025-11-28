@@ -256,7 +256,13 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
 
         Configuration.ValidationResult validation = ExternalConfigurationValidator.Validate(cfg);
         if (!validation.IsValid) {
-            LoggerDelegates.LoadedConfigurationInvalid(_logger, string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)), null);
+            // Emit one log entry per validation failure (structured fields) so CSV logs have discrete columns
+            foreach (ValidationFailure vf in validation.Errors) {
+                LoggerDelegates.ConfigValidationFailure(_logger, vf.PropertyName, vf.ErrorMessage, null);
+            }
+            // also emit the legacy aggregated message for backward compatibility
+            string errors = string.Join("; ", validation.Errors.Select(e => $"{e.PropertyName}: {e.ErrorMessage}"));
+            LoggerDelegates.LoadedConfigurationInvalid(_logger, errors, null);
             // try minimal fallback
             if (doc is not null) {
                 var fb = new ExternalConfiguration();

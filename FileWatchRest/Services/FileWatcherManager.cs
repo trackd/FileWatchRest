@@ -130,6 +130,9 @@ public class FileWatcherManager(ILogger<FileWatcherManager> logger, DiagnosticsS
                     LoggerDelegates.WatchingFolder(_logger, folder, null);
                 }
             }
+            catch (UnauthorizedAccessException uex) {
+                LoggerDelegates.WatcherAccessDenied(_logger, folder, uex);
+            }
             catch (Exception ex) {
                 LoggerDelegates.FailedToWatchFolder(_logger, folder, ex);
             }

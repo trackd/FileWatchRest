@@ -33,6 +33,8 @@ internal static class LoggerDelegates {
         LoggerMessage.Define<string>(LogLevel.Information, new EventId(612, "ConfigSaved"), "Configuration saved to {Path}");
     internal static readonly Action<ILogger<ExternalConfigurationOptionsMonitor>, string, Exception?> FailedToSave =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(613, "FailedToSave"), "Failed to save configuration to {Path}");
+    internal static readonly Action<ILogger<ExternalConfigurationOptionsMonitor>, string, string, Exception?> ConfigValidationFailure =
+        LoggerMessage.Define<string, string>(LogLevel.Error, new EventId(622, "ConfigValidationFailure"), "Configuration validation error {Property}: {Message}");
     internal static readonly Action<ILogger<ExternalConfigurationOptionsMonitor>, Exception?> RuntimeValidationWarning =
         LoggerMessage.Define(LogLevel.Warning, new EventId(614, "RuntimeConfigValidationWarning"), "Runtime configuration validation threw an exception; proceeding with decrypted configuration");
     internal static readonly Action<ILogger<ExternalConfigurationOptionsMonitor>, Exception?> EncryptionNotAvailable =
@@ -85,6 +87,8 @@ internal static class LoggerDelegates {
         LoggerMessage.Define<string>(LogLevel.Information, new EventId(301, "WatchingFolder"), "Watching folder: {Folder}");
     internal static readonly Action<ILogger<FileWatcherManager>, string, Exception?> FailedToWatchFolder =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(302, "FailedToWatchFolder"), "Failed to watch folder {Folder}");
+    internal static readonly Action<ILogger<FileWatcherManager>, string, Exception?> WatcherAccessDenied =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(310, "WatcherAccessDenied"), "Access denied watching folder {Folder}");
     internal static readonly Action<ILogger<FileWatcherManager>, string, Exception?> WatcherError =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(303, "WatcherError"), "FileSystemWatcher error for folder {Folder}");
     internal static readonly Action<ILogger<FileWatcherManager>, string, int, int, Exception?> AttemptingRestart =
@@ -180,6 +184,9 @@ internal static class LoggerDelegates {
     internal static readonly Action<ILogger<PowerShellScriptAction>, string, Exception?> PowerShellStartFailed =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(706, "PowerShellStartFailed"), "Failed to start PowerShell process for {ScriptPath}");
 
+    internal static readonly Action<ILogger<PowerShellScriptAction>, string, Exception?> PowerShellAccessDenied =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(710, "PowerShellAccessDenied"), "Access denied starting PowerShell script {ScriptPath}");
+
     internal static readonly Action<ILogger<PowerShellScriptAction>, string, Exception?> PowerShellProcessNotStarted =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(707, "PowerShellProcessNotStarted"), "PowerShell process did not start for {ScriptPath}");
 
@@ -188,6 +195,12 @@ internal static class LoggerDelegates {
 
     internal static readonly Action<ILogger<ExecutableAction>, string, int, Exception?> ExecutableExitCode =
         LoggerMessage.Define<string, int>(LogLevel.Information, new EventId(709, "ExecutableExitCode"), "Executable {Path} exited with code {ExitCode}");
+
+    internal static readonly Action<ILogger<ExecutableAction>, string, Exception?> ExecutableStartFailed =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(712, "ExecutableStartFailed"), "Failed to start executable {Path}");
+
+    internal static readonly Action<ILogger<ExecutableAction>, string, Exception?> ExecutableAccessDenied =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(711, "ExecutableAccessDenied"), "Access denied starting executable {Path}");
 
     // PowerShell and Executable timeout events
     internal static readonly Action<ILogger<PowerShellScriptAction>, string, int, Exception?> PowerShellTimeout =

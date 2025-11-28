@@ -19,8 +19,11 @@ public sealed class ExternalConfigurationValidator {
                 }
                 else {
                     // Ensure referenced action exists
-                    if (config.Actions?.Any(a => string.Equals(a.Name, folder.ActionName, StringComparison.OrdinalIgnoreCase)) != true) {
-                        errors.Add(new ValidationFailure($"Folders[{i}].ActionName", $"Folder references unknown Action '{folder.ActionName}'"));
+                    if (config.Actions is null || config.Actions.FindIndex(a => string.Equals(a.Name, folder.ActionName, StringComparison.OrdinalIgnoreCase)) < 0) {
+                        string available = config.Actions is null || config.Actions.Count == 0 ? "(none defined)" : string.Join(", ", config.Actions.Where(a => !string.IsNullOrWhiteSpace(a.Name)).Select(a => a.Name));
+                        string folderPath = folder.FolderPath ?? string.Empty;
+                        string msg = $"Folder '{folderPath}' references unknown Action '{folder.ActionName}'. Available Actions: {available}. Ensure the action is defined in Actions[] and the names match (case-insensitive).";
+                        errors.Add(new ValidationFailure($"Folders[{i}].ActionName", msg));
                     }
                 }
             }
@@ -31,8 +34,10 @@ public sealed class ExternalConfigurationValidator {
         bool topLevelApiValid = !string.IsNullOrWhiteSpace(config.ApiEndpoint) && Uri.TryCreate(config.ApiEndpoint, UriKind.Absolute, out _);
         if (restActions.Count > 0) {
             // If any RestPost action does not define its own ApiEndpoint, require a valid top-level ApiEndpoint
-            if (!topLevelApiValid && restActions.Any(a => string.IsNullOrWhiteSpace(a.ApiEndpoint))) {
-                errors.Add(new ValidationFailure(nameof(config.ApiEndpoint), "ApiEndpoint must be a non-empty absolute URI when REST actions rely on the top-level default"));
+            var missingPerAction = restActions.Where(a => string.IsNullOrWhiteSpace(a.ApiEndpoint)).Select(a => a.Name ?? "(unnamed)").ToList();
+            if (!topLevelApiValid && missingPerAction.Count > 0) {
+                string missingList = string.Join(", ", missingPerAction);
+                errors.Add(new ValidationFailure(nameof(config.ApiEndpoint), $"ApiEndpoint must be a non-empty absolute URI because the following RestPost actions do not define an ApiEndpoint: {missingList}. Either set a global ApiEndpoint or configure ApiEndpoint per action."));
             }
         }
 
@@ -188,7 +193,7 @@ public sealed class ExternalConfigurationValidator {
 public sealed class ValidationResult {
     public ValidationResult(IEnumerable<ValidationFailure> failures) {
         Errors = [.. failures];
-        IsValid = !Errors.Any();
+        IsValid = Errors.Count == 0;
     }
 
     public bool IsValid { get; }

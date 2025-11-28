@@ -18,9 +18,15 @@ public class PowerShellScriptAction(
         // Build the ProcessStartInfo via the class-level factory so tests can inspect it.
         ProcessStartInfo psi = CreateProcessStartInfo(fileEvent);
 
-        var process = default(Process);
+        Process? process = null;
         try {
             process = Process.Start(psi);
+        }
+        catch (UnauthorizedAccessException uex) {
+            if (_logger.IsEnabled(LogLevel.Error)) {
+                LoggerDelegates.PowerShellAccessDenied(_logger, _scriptPath, uex);
+            }
+            return;
         }
         catch (Exception ex) {
             if (_logger.IsEnabled(LogLevel.Error)) {
