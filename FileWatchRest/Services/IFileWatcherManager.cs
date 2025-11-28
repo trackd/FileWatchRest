@@ -30,4 +30,10 @@ public interface IFileWatcherManager : IDisposable {
     /// <param name="configs"></param>
     /// <param name="worker"></param>
     void ConfigureFolderActions(List<ExternalConfiguration.WatchedFolderConfig> configs, ExternalConfiguration globalConfig, Worker worker);
+
+    /// <summary>
+    /// Determine the configured action type for a given file path by matching the most specific watched folder.
+    /// Returns null when no matching folder or action is found.
+    /// </summary>
+    ExternalConfiguration.FolderActionType? GetActionTypeForPath(string path);
 }

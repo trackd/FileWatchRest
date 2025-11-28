@@ -206,8 +206,16 @@ public partial class Worker : BackgroundService {
                 }
             }
 
+            // Only attempt to POST to an API when the configured action for this path is a RestPost.
+            ExternalConfiguration.FolderActionType? actionType = _fileWatcherManager.GetActionTypeForPath(path);
+            if (actionType != ExternalConfiguration.FolderActionType.RestPost) {
+                // Not a REST-targeted action; nothing for Worker to send here.
+                return;
+            }
+
             FileNotification notification = await CreateNotificationAsync(path, cfg, ct);
             LoggerDelegates.CreatedNotificationDebug(_logger, path, notification.FileSize, !string.IsNullOrEmpty(notification.Content), null);
+
             bool success = await SendNotificationAsync(notification, cfg, ct);
 
             if (success && cfg.MoveProcessedFiles) {
@@ -222,6 +230,14 @@ public partial class Worker : BackgroundService {
             _diagnostics.RecordFileEvent(path, false, null);
         }
     }
+
+    /// Determine the configured action type for a given file path by matching the most specific watched folder and
+    /// <summary>
+    /// Determine the configured action type for a given file path by matching the most specific watched folder and
+    /// </summary>
+    /// <param name="path"></param>
+    /// <returns></returns>.
+    // Action type lookup is provided by FileWatcherManager via a precomputed mapping.
 
     internal static async Task<bool> WaitForFileReadyAsync(string path, ExternalConfiguration cfg, CancellationToken ct) {
         var sw = Stopwatch.StartNew();

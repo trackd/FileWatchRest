@@ -63,6 +63,7 @@ public class ExternalConfiguration {
             }
         }
     }
+    [JsonConverter(typeof(JsonStringEnumConverter<FolderActionType>))]
     public enum FolderActionType {
         RestPost = 0,
         Executable = 1,

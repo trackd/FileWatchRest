@@ -13,6 +13,8 @@ public class FileWatcherManager(ILogger<FileWatcherManager> logger, DiagnosticsS
     /// </summary>
     // Maps folder path to list of actions
     internal readonly Dictionary<string, List<IFolderAction>> _folderActions = new(StringComparer.OrdinalIgnoreCase);
+    // Maps folder path to resolved ActionType (if any)
+    internal readonly Dictionary<string, ExternalConfiguration.FolderActionType?> _folderActionTypes = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Rebuilds the folder-to-action mapping from configuration. Call on config reload.
@@ -21,6 +23,7 @@ public class FileWatcherManager(ILogger<FileWatcherManager> logger, DiagnosticsS
     /// <param name="worker"></param>
     public void ConfigureFolderActions(List<ExternalConfiguration.WatchedFolderConfig> configs, ExternalConfiguration globalConfig, Worker worker) {
         _folderActions.Clear();
+        _folderActionTypes.Clear();
         foreach (ExternalConfiguration.WatchedFolderConfig config in configs) {
             var actions = new List<IFolderAction>();
 
@@ -52,8 +55,27 @@ public class FileWatcherManager(ILogger<FileWatcherManager> logger, DiagnosticsS
 
             if (!string.IsNullOrWhiteSpace(config.FolderPath)) {
                 _folderActions[config.FolderPath] = actions;
+                _folderActionTypes[config.FolderPath] = actionDef?.ActionType;
             }
         }
+    }
+    public ExternalConfiguration.FolderActionType? GetActionTypeForPath(string path) {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        string normalized = Path.GetFullPath(path);
+
+        // Find longest-prefix matching configured folder
+        string? bestMatch = null;
+        foreach (string folder in _folderActionTypes.Keys) {
+            if (string.IsNullOrWhiteSpace(folder)) continue;
+            string folderFull;
+            try { folderFull = Path.GetFullPath(folder); } catch { continue; }
+            if (!normalized.StartsWith(folderFull, StringComparison.OrdinalIgnoreCase)) continue;
+            if (bestMatch is null || folderFull.Length > Path.GetFullPath(bestMatch).Length) bestMatch = folder;
+        }
+
+        return bestMatch is null
+            ? null
+            : _folderActionTypes.TryGetValue(bestMatch, out ExternalConfiguration.FolderActionType? actionType) ? actionType : null;
     }
     // Back-compat overload used by some tests/callers: delegate to new API with empty global config
     public void ConfigureFolderActions(List<ExternalConfiguration.WatchedFolderConfig> configs, Worker worker) => ConfigureFolderActions(configs, new ExternalConfiguration(), worker);
