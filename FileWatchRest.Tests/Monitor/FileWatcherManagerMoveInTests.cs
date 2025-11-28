@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests;
+namespace FileWatchRest.Tests;
 
 /// <summary>
 /// Tests for file system watcher event handling, specifically verifying that all accepted event types

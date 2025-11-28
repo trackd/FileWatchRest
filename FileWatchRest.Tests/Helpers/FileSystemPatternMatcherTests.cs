@@ -1,7 +1,3 @@
-﻿using FileWatchRest.Helpers;
-using FluentAssertions;
-using Xunit;
-
 namespace FileWatchRest.Tests.Helpers;
 
 public class FileSystemPatternMatcherTests {

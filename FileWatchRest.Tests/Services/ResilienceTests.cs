@@ -1,8 +1,3 @@
-﻿using FluentAssertions;
-using FileWatchRest.Services;
-using System;
-using Xunit;
-
 namespace FileWatchRest.Tests.Services;
 
 public class ResilienceTests {

@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests;
+namespace FileWatchRest.Tests;
 
 public class WorkerDuplicatePreventionTests {
     [Fact]
@@ -7,10 +7,10 @@ public class WorkerDuplicatePreventionTests {
         ILogger<Worker> logger = loggerFactory.CreateLogger<Worker>();
         var mockHttpFactory = new Mock<IHttpClientFactory>();
         var mockLifetime = new Mock<IHostApplicationLifetime>();
-        var diagnostics = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new TestUtilities.OptionsMonitorMock<ExternalConfiguration>());
+        var diagnostics = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new OptionsMonitorMock<ExternalConfiguration>());
         var fileWatcherManager = new FileWatcherManager(loggerFactory.CreateLogger<FileWatcherManager>(), diagnostics);
         IResilienceService resilienceService = new Mock<IResilienceService>().Object;
-        var optionsMonitor = new TestUtilities.OptionsMonitorMock<ExternalConfiguration>();
+        var optionsMonitor = new OptionsMonitorMock<ExternalConfiguration>();
 
         Worker worker = WorkerFactory.CreateWorker(
             logger: logger,
@@ -28,7 +28,7 @@ public class WorkerDuplicatePreventionTests {
 
         // Run ProcessFileAsync using reflection - if file is already posted, it should be skipped (no exception)
         CancellationToken ct = new CancellationTokenSource(1000).Token;
-        System.Reflection.MethodInfo? processFileMethod = typeof(Worker).GetMethod("ProcessFileAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        MethodInfo? processFileMethod = typeof(Worker).GetMethod("ProcessFileAsync", BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.NotNull(processFileMethod);
         object? result = processFileMethod.Invoke(worker, [testPath, ct]);
         Assert.NotNull(result);

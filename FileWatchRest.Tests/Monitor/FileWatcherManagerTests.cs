@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests;
+namespace FileWatchRest.Tests;
 
 public class FileWatcherManagerTests {
     [Fact]
@@ -31,7 +31,7 @@ public class FileWatcherManagerTests {
 
         // Try to trigger watcher errors; OS behavior is not reliable in test environments,
         // so invoke the manager's error handler reflectively to simulate repeated errors
-        System.Reflection.MethodInfo? mi = manager.GetType().GetMethod("HandleWatcherError", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        MethodInfo? mi = manager.GetType().GetMethod("HandleWatcherError", BindingFlags.NonPublic | BindingFlags.Instance);
         if (mi != null) {
             var errorArgs = new ErrorEventArgs(new InvalidOperationException("simulated"));
             // Invoke enough times to exceed the configured restart attempts

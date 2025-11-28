@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests;
+namespace FileWatchRest.Tests;
 
 /// <summary>
 /// Comprehensive tests for ExternalConfigurationOptionsMonitor covering:

@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests.Models;
+namespace FileWatchRest.Tests.Models;
 
 public class JsonContextsTests {
     [Fact]

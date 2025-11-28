@@ -1,10 +1,3 @@
-﻿using System.Threading;
-using System.Threading.Tasks;
-using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
-using FileWatchRest.Services;
-using Xunit;
-
 namespace FileWatchRest.Tests.Action;
 
 public class RestPostActionTests {
@@ -16,7 +9,7 @@ public class RestPostActionTests {
         var debounce = new FileDebounceService(NullLogger<FileDebounceService>.Instance, channel.Writer, () => new ExternalConfiguration { DebounceMilliseconds = 0 });
 
         // Diagnostics and other deps
-        var options = new TestUtilities.OptionsMonitorMock<ExternalConfiguration>();
+        var options = new OptionsMonitorMock<ExternalConfiguration>();
         var diagnostics = new DiagnosticsService(NullLogger<DiagnosticsService>.Instance, options);
         var watcherManager = new FileWatcherManager(NullLogger<FileWatcherManager>.Instance, diagnostics);
 

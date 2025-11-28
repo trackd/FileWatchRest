@@ -37,12 +37,12 @@ public class FileWatcherManager(ILogger<FileWatcherManager> logger, DiagnosticsS
                         break;
                     case ExternalConfiguration.FolderActionType.PowerShellScript:
                         if (!string.IsNullOrWhiteSpace(actionDef.ScriptPath)) {
-                            actions.Add(new PowerShellScriptAction(actionDef.ScriptPath, actionDef.Arguments));
+                            actions.Add(new PowerShellScriptAction(actionDef.ScriptPath, actionDef.Arguments, null, actionDef.ExecutionTimeoutMilliseconds, actionDef.IgnoreOutput ?? false));
                         }
                         break;
                     case ExternalConfiguration.FolderActionType.Executable:
                         if (!string.IsNullOrWhiteSpace(actionDef.ExecutablePath)) {
-                            actions.Add(new ExecutableAction(actionDef.ExecutablePath, actionDef.Arguments));
+                            actions.Add(new ExecutableAction(actionDef.ExecutablePath, actionDef.Arguments, null, actionDef.ExecutionTimeoutMilliseconds, actionDef.IgnoreOutput ?? false));
                         }
                         break;
                     default:

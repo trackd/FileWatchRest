@@ -1,6 +1,3 @@
-using FileWatchRest.Helpers;
-using Xunit;
-
 namespace FileWatchRest.Tests;
 
 /// <summary>

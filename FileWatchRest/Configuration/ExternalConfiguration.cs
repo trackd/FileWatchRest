@@ -141,6 +141,19 @@ public class ExternalConfiguration {
         public int? WaitForFileReadyMilliseconds { get; set; }
 
         /// <summary>
+        /// Maximum allowed execution time for this action in milliseconds. If set and the process
+        /// exceeds this duration it will be terminated and treated as a timeout.
+        /// Default: 60000 (60 seconds) — persisted when configuration is saved.
+        /// </summary>
+        public int? ExecutionTimeoutMilliseconds { get; set; } = 60_000;
+
+        /// <summary>
+        /// When true, action runners will drain stdout/stderr but not persist or log their contents.
+        /// Useful when executing verbose binaries where output should be ignored to avoid large logs.
+        /// </summary>
+        public bool? IgnoreOutput { get; set; } = false;
+
+        /// <summary>
         /// Content size settings (overrides global defaults when set)
         /// </summary>
         public long? MaxContentBytes { get; set; }

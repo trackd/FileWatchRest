@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests;
+namespace FileWatchRest.Tests;
 
 public class WorkerStreamingTests {
     [Fact(DisplayName = "SendNotificationAsync_FileLargerThanThreshold_UsesMultipartContent")]

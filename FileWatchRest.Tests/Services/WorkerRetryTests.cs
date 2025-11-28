@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests;
+namespace FileWatchRest.Tests;
 
 public class WorkerRetryTests {
     private readonly ILogger<Worker> _workerLogger;

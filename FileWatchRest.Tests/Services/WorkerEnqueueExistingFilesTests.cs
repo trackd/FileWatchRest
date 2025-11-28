@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests;
+namespace FileWatchRest.Tests;
 
 public class WorkerEnqueueExistingFilesTests {
     [Fact]
@@ -7,10 +7,10 @@ public class WorkerEnqueueExistingFilesTests {
         ILogger<Worker> logger = loggerFactory.CreateLogger<Worker>();
         var mockHttpFactory = new Mock<IHttpClientFactory>();
         var mockLifetime = new Mock<IHostApplicationLifetime>();
-        var diagnostics = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new TestUtilities.OptionsMonitorMock<ExternalConfiguration>());
+        var diagnostics = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new OptionsMonitorMock<ExternalConfiguration>());
         var fileWatcherManager = new FileWatcherManager(loggerFactory.CreateLogger<FileWatcherManager>(), diagnostics);
         IResilienceService resilienceService = new Mock<IResilienceService>().Object;
-        var optionsMonitor = new TestUtilities.OptionsMonitorMock<ExternalConfiguration>();
+        var optionsMonitor = new OptionsMonitorMock<ExternalConfiguration>();
 
         Worker worker = WorkerFactory.CreateWorker(
             logger: logger,
@@ -41,14 +41,14 @@ public class WorkerEnqueueExistingFilesTests {
         worker.CurrentConfig = config;
 
         // Get the debounce service mock from the worker to check what was scheduled
-        System.Reflection.FieldInfo? debounceServiceField = typeof(Worker).GetField("_debounceService", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        FieldInfo? debounceServiceField = typeof(Worker).GetField("_debounceService", BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.NotNull(debounceServiceField);
         var debounceService = debounceServiceField.GetValue(worker) as FileDebounceServiceMock;
         Assert.NotNull(debounceService);
         debounceService.ClearScheduled();
 
         // Run EnqueueExistingFilesAsync
-        System.Reflection.MethodInfo? enqueueMethod = typeof(Worker).GetMethod("EnqueueExistingFilesAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        MethodInfo? enqueueMethod = typeof(Worker).GetMethod("EnqueueExistingFilesAsync", BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.NotNull(enqueueMethod);
         object? result = enqueueMethod.Invoke(worker, [CancellationToken.None]);
         Assert.NotNull(result);

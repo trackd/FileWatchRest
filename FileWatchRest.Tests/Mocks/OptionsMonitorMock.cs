@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests.TestUtilities;
+namespace FileWatchRest.Tests.TestUtilities;
 
 public class OptionsMonitorMock<T> : IOptionsMonitor<T> where T : class, new() {
     private readonly List<Action<T, string>> _listeners = [];

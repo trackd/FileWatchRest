@@ -1,11 +1,3 @@
-﻿using System.Threading.Channels;
-using System.Threading;
-using System.Threading.Tasks;
-using FileWatchRest.Configuration;
-using Microsoft.Extensions.Logging.Abstractions;
-using FluentAssertions;
-using Xunit;
-
 namespace FileWatchRest.Tests.Services;
 
 public class FileDebounceServiceTests {
@@ -13,9 +5,11 @@ public class FileDebounceServiceTests {
     public async Task ExecuteAsync_writes_scheduled_file_to_output_channel_after_debounce() {
         var channel = Channel.CreateUnbounded<string>();
         var config = new ExternalConfiguration { DebounceMilliseconds = 0 };
-        ExternalConfiguration GetConfig() => config;
+        ExternalConfiguration GetConfig() {
+            return config;
+        }
 
-        var svc = new FileWatchRest.Services.FileDebounceService(NullLogger<FileWatchRest.Services.FileDebounceService>.Instance, channel.Writer, GetConfig);
+        var svc = new FileDebounceService(NullLogger<FileDebounceService>.Instance, channel.Writer, GetConfig);
 
         // Schedule a file and run the service briefly
         svc.Schedule("file1.txt");
@@ -24,11 +18,11 @@ public class FileDebounceServiceTests {
         await svc.StartAsync(CancellationToken.None);
 
         // Attempt to read output (should be produced quickly since DebounceMilliseconds = 0)
-        var readTask = channel.Reader.ReadAsync(cts.Token).AsTask();
-        var completed = await Task.WhenAny(readTask, Task.Delay(1500, cts.Token));
+        Task<string> readTask = channel.Reader.ReadAsync(cts.Token).AsTask();
+        Task completed = await Task.WhenAny(readTask, Task.Delay(1500, cts.Token));
 
         completed.Should().Be(readTask, "the debounce service should write scheduled files to the output channel");
-        var result = await readTask;
+        string result = await readTask;
         result.Should().Be("file1.txt");
 
         // Stop service

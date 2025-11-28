@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests;
+namespace FileWatchRest.Tests;
 
 public class ConfigurationServiceMigrationTests : IDisposable {
     private readonly string _serviceNamePrefix = "FileWatchRest_Test_Migrate_" + Guid.NewGuid().ToString("N");

@@ -174,6 +174,28 @@ internal static class LoggerDelegates {
     internal static readonly Action<ILogger<PowerShellScriptAction>, string, string, Exception?> PowerShellOutputXml =
         LoggerMessage.Define<string, string>(LogLevel.Information, new EventId(701, "PowerShellOutputXml"), "PowerShell output XML for {ScriptPath}: {Xml}");
 
+    internal static readonly Action<ILogger<PowerShellScriptAction>, string, int, Exception?> PowerShellExitCode =
+        LoggerMessage.Define<string, int>(LogLevel.Information, new EventId(708, "PowerShellExitCode"), "PowerShell script {ScriptPath} exited with code {ExitCode}");
+
+    internal static readonly Action<ILogger<PowerShellScriptAction>, string, Exception?> PowerShellStartFailed =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(706, "PowerShellStartFailed"), "Failed to start PowerShell process for {ScriptPath}");
+
+    internal static readonly Action<ILogger<PowerShellScriptAction>, string, Exception?> PowerShellProcessNotStarted =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(707, "PowerShellProcessNotStarted"), "PowerShell process did not start for {ScriptPath}");
+
+    internal static readonly Action<ILogger<ExecutableAction>, string, string, Exception?> ExecutableOutput =
+        LoggerMessage.Define<string, string>(LogLevel.Information, new EventId(705, "ExecutableOutput"), "Executable output for {Path}: {Output}");
+
+    internal static readonly Action<ILogger<ExecutableAction>, string, int, Exception?> ExecutableExitCode =
+        LoggerMessage.Define<string, int>(LogLevel.Information, new EventId(709, "ExecutableExitCode"), "Executable {Path} exited with code {ExitCode}");
+
+    // PowerShell and Executable timeout events
+    internal static readonly Action<ILogger<PowerShellScriptAction>, string, int, Exception?> PowerShellTimeout =
+        LoggerMessage.Define<string, int>(LogLevel.Warning, new EventId(703, "PowerShellTimeout"), "PowerShell script {ScriptPath} timed out after {Milliseconds}ms");
+
+    internal static readonly Action<ILogger<ExecutableAction>, string, int, Exception?> ExecutableTimeout =
+        LoggerMessage.Define<string, int>(LogLevel.Warning, new EventId(704, "ExecutableTimeout"), "Executable {Path} timed out after {Milliseconds}ms");
+
     /// <summary>
     /// Generic upload result used by tests to validate provider structured fields
     /// </summary>

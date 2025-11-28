@@ -1,7 +1,3 @@
-﻿using FileWatchRest.Configuration;
-using FileWatchRest.Services;
-using Microsoft.Extensions.Logging;
-
 namespace FileWatchRest.Tests;
 
 /// <summary>
@@ -35,7 +31,7 @@ public class WorkerMoveProcessedTests : IDisposable {
             }]
         };
 
-        var diagService = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new TestUtilities.OptionsMonitorMock<ExternalConfiguration>());
+        var diagService = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new OptionsMonitorMock<ExternalConfiguration>());
 
         Worker worker = WorkerFactory.CreateWorker(
             logger: loggerFactory.CreateLogger<Worker>(),
@@ -50,7 +46,7 @@ public class WorkerMoveProcessedTests : IDisposable {
         worker.CurrentConfig = config;
 
         // Act
-        System.Reflection.MethodInfo? moveMethod = typeof(Worker).GetMethod("MoveToProcessedFolderAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        MethodInfo? moveMethod = typeof(Worker).GetMethod("MoveToProcessedFolderAsync", BindingFlags.NonPublic | BindingFlags.Instance);
         object? result = moveMethod?.Invoke(worker, [testFilePath, config, CancellationToken.None]);
         if (result is Task task) {
             await task;
@@ -83,7 +79,7 @@ public class WorkerMoveProcessedTests : IDisposable {
             Actions = [new() { Name = "TestAction", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "http://localhost:8080/api/files" }]
         };
 
-        var diagService = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new TestUtilities.OptionsMonitorMock<ExternalConfiguration>());
+        var diagService = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new OptionsMonitorMock<ExternalConfiguration>());
 
         Worker worker = WorkerFactory.CreateWorker(
             logger: loggerFactory.CreateLogger<Worker>(),
@@ -97,7 +93,7 @@ public class WorkerMoveProcessedTests : IDisposable {
 
         worker.CurrentConfig = config;
 
-        System.Reflection.MethodInfo? moveMethod = typeof(Worker).GetMethod("MoveToProcessedFolderAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        MethodInfo? moveMethod = typeof(Worker).GetMethod("MoveToProcessedFolderAsync", BindingFlags.NonPublic | BindingFlags.Instance);
 
         if (moveMethod?.Invoke(worker, [testFile1, config, CancellationToken.None]) is Task task1) {
             await task1;
@@ -132,7 +128,7 @@ public class WorkerMoveProcessedTests : IDisposable {
             Actions = [new() { Name = "TestAction", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "http://localhost:8080/api/files" }]
         };
 
-        var diagService = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new TestUtilities.OptionsMonitorMock<ExternalConfiguration>());
+        var diagService = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new OptionsMonitorMock<ExternalConfiguration>());
 
         Worker worker = WorkerFactory.CreateWorker(
             logger: loggerFactory.CreateLogger<Worker>(),
@@ -146,7 +142,7 @@ public class WorkerMoveProcessedTests : IDisposable {
 
         worker.CurrentConfig = config;
 
-        System.Reflection.MethodInfo? moveMethod = typeof(Worker).GetMethod("MoveToProcessedFolderAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        MethodInfo? moveMethod = typeof(Worker).GetMethod("MoveToProcessedFolderAsync", BindingFlags.NonPublic | BindingFlags.Instance);
 
         // Act - Should not throw
         if (moveMethod?.Invoke(worker, [nonExistentFile, config, CancellationToken.None]) is Task task) {

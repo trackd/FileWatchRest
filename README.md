@@ -123,20 +123,20 @@ Example configuration (typed `Folders` + `Actions`):
     "RetainedDays": 14
   }
 }
+```
 
-Config file overrides
+Config file overrides  
 
 You can override the default configuration file path when starting the service or in your environment:
 
 - **Command-line:** pass `--config <path>` or `-c <path>` to specify the configuration file to use.
 - **Environment variable:** set `FILEWATCHREST_CONFIG` to a file path and it will be used when no `--config` arg is provided.
 
-If neither is provided the service falls back to the default file under `$env:ProgramData\FileWatchRest\FileWatchRest.json`.
-```
+If neither is provided the service falls back to the default file under `$env:ProgramData\FileWatchRest\FileWatchRest.json`.  
 
 ## Additional Configuration Examples
 
-Below are a few small example configurations demonstrating common patterns (minimal REST action, reusable PowerShell action, mixed action types, and legacy string-array folders). These are provided here for convenience; full example files are in the `examples/` folder and a single runnable template is in `FileWatchRest.json.example`.
+Below are a few small example configurations demonstrating common patterns (minimal REST action, reusable PowerShell action, mixed action types, and legacy string-array folders). These are provided here for convenience; full example files are in the `examples/` folder and a single runnable template is in `FileWatchRest.json.example`.  
 
 Example files (in-repo):
 
@@ -144,7 +144,7 @@ Example files (in-repo):
 - `examples/FileWatchRest.example.powershell.json`: reusable PowerShell action example
 - `examples/FileWatchRest.example.mixed.json`: mixed executable + REST example
 
-Use these as starting points — copy the one you need to `FileWatchRest.json` (or point the service to it with `--config`).
+Use these as starting points — copy the one you need to `FileWatchRest.json` (or point the service to it with `--config`).  
 
 ### 1) Minimal single REST action (simple)
 
@@ -279,6 +279,8 @@ Precedence and overrides:
   machine-specific encryption when saved. Plain text tokens are automatically encrypted on first  
   save.  
 - `PostFileContents`: If true, reads and includes file contents in the POST
+- `ExecutionTimeoutMilliseconds`: Optional per-action timeout in milliseconds. When set, the action's process will be terminated if it runs longer than this duration. Default: 60000 (60s).
+- `IgnoreOutput`: Optional boolean. When true the action will not capture or log stdout/stderr (they are not redirected). Use this to avoid buffering or logging large outputs. Default: false.
 - `MoveProcessedFiles`: If true, moves files to processed folder after successful POST
 - `ProcessedFolder`: Name of subfolder to move processed files to (default: "processed"). Files in
   this folder are automatically excluded from monitoring to prevent infinite loops.  

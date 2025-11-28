@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests.Configuration;
+namespace FileWatchRest.Tests.Configuration;
 
 public class SecureConfigurationHelperTests {
     [Fact]

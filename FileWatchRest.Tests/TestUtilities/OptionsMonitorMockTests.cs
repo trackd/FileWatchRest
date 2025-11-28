@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests.TestUtilities;
+namespace FileWatchRest.Tests.TestUtilities;
 
 public class OptionsMonitorMockTests {
     private sealed class Dummy {
@@ -7,7 +7,7 @@ public class OptionsMonitorMockTests {
 
     [Fact]
     public void OnChange_sync_listener_invoked_and_dispose_noop() {
-            var monitor = new FileWatchRest.TestUtilities.OptionsMonitorMock<Dummy>();
+        var monitor = new FileWatchRest.TestUtilities.OptionsMonitorMock<Dummy>();
         Dummy? observed = null;
         string? name = null;
         int called = 0;
@@ -31,7 +31,7 @@ public class OptionsMonitorMockTests {
 
     [Fact]
     public void OnChange_async_listener_invoked() {
-            var monitor = new FileWatchRest.TestUtilities.OptionsMonitorMock<Dummy>();
+        var monitor = new FileWatchRest.TestUtilities.OptionsMonitorMock<Dummy>();
         Dummy? observed = null;
         string? name = null;
         int called = 0;

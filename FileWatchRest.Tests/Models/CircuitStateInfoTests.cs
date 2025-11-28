@@ -1,8 +1,3 @@
-﻿using System;
-using Xunit;
-using FluentAssertions;
-using FileWatchRest.Models;
-
 namespace FileWatchRest.Tests.Models;
 
 public class CircuitStateInfoTests {

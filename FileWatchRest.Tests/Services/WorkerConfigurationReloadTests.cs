@@ -1,7 +1,3 @@
-﻿using FileWatchRest.Configuration;
-using FileWatchRest.Services;
-using Microsoft.Extensions.Logging;
-
 namespace FileWatchRest.Tests;
 
 /// <summary>
@@ -30,7 +26,7 @@ public class WorkerConfigurationReloadTests : IDisposable {
         };
 
         var optionsMonitor = new SimpleOptionsMonitor<ExternalConfiguration>(initialConfig);
-        var diagnostics = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new TestUtilities.OptionsMonitorMock<ExternalConfiguration>());
+        var diagnostics = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new OptionsMonitorMock<ExternalConfiguration>());
         var fileWatcherManager = new FileWatcherManager(loggerFactory.CreateLogger<FileWatcherManager>(), diagnostics);
 
         Worker worker = WorkerFactory.CreateWorker(
@@ -78,7 +74,7 @@ public class WorkerConfigurationReloadTests : IDisposable {
         };
 
         var optionsMonitor = new SimpleOptionsMonitor<ExternalConfiguration>(initialConfig);
-        var diagService = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new TestUtilities.OptionsMonitorMock<ExternalConfiguration>());
+        var diagService = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new OptionsMonitorMock<ExternalConfiguration>());
 
         Worker worker = WorkerFactory.CreateWorker(
             logger: loggerFactory.CreateLogger<Worker>(),
@@ -122,7 +118,7 @@ public class WorkerConfigurationReloadTests : IDisposable {
         };
 
         var optionsMonitor = new SimpleOptionsMonitor<ExternalConfiguration>(initialConfig);
-        var diagnostics = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new TestUtilities.OptionsMonitorMock<ExternalConfiguration>());
+        var diagnostics = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new OptionsMonitorMock<ExternalConfiguration>());
         var fileWatcherManager = new FileWatcherManager(loggerFactory.CreateLogger<FileWatcherManager>(), diagnostics);
 
         var resilience = new HttpResilienceService(loggerFactory.CreateLogger<HttpResilienceService>(), diagnostics);
@@ -173,7 +169,7 @@ public class WorkerConfigurationReloadTests : IDisposable {
         };
 
         var optionsMonitor = new SimpleOptionsMonitor<ExternalConfiguration>(config);
-        var diagService = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new TestUtilities.OptionsMonitorMock<ExternalConfiguration>());
+        var diagService = new DiagnosticsService(loggerFactory.CreateLogger<DiagnosticsService>(), new OptionsMonitorMock<ExternalConfiguration>());
 
         // Act
         Worker worker = WorkerFactory.CreateWorker(
@@ -187,7 +183,7 @@ public class WorkerConfigurationReloadTests : IDisposable {
         );
 
         // Call ConfigureLogging via reflection
-        System.Reflection.MethodInfo? configureMethod = typeof(Worker).GetMethod("ConfigureLogging", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        MethodInfo? configureMethod = typeof(Worker).GetMethod("ConfigureLogging", BindingFlags.NonPublic | BindingFlags.Instance);
         configureMethod?.Invoke(worker, ["Debug"]);
 
         await Task.Delay(100);

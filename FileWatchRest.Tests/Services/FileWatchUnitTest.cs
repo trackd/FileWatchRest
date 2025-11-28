@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests;
+namespace FileWatchRest.Tests;
 
 // Restored tests originally from FileWatchRest.Tests/FileWatchUnitTest.cs on main branch.
 // These verify core models and light integration helpers and are placed under Services.

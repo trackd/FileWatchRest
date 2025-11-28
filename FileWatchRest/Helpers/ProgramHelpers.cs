@@ -1,12 +1,9 @@
-﻿using System;
-using System.IO;
-
 namespace FileWatchRest;
 
 public static class ProgramHelpers {
     public static string GetExternalConfigPath(string[]? args, Func<string?>? envGetter = null, string? programData = null, Func<string, bool>? existsChecker = null) {
         envGetter ??= () => Environment.GetEnvironmentVariable("FILEWATCHREST_CONFIG");
-        existsChecker ??= path => File.Exists(path);
+        existsChecker ??= File.Exists;
         string? explicitConfig = null;
 
         if (args?.Length > 0) {
