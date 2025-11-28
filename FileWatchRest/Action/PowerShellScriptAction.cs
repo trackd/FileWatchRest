@@ -18,6 +18,15 @@ public class PowerShellScriptAction(
         // Build the ProcessStartInfo via the class-level factory so tests can inspect it.
         ProcessStartInfo psi = CreateProcessStartInfo(fileEvent);
 
+        // If the configured script path does not exist at runtime, log an explicit not-found event and bail.
+        if (!File.Exists(_scriptPath)) {
+            if (_logger.IsEnabled(LogLevel.Error)) {
+                var fnf = new FileNotFoundException($"Configured PowerShell script not found: {_scriptPath}", _scriptPath);
+                LoggerDelegates.PowerShellScriptNotFound(_logger, _scriptPath, fnf);
+            }
+            return;
+        }
+
         Process? process = null;
         try {
             process = Process.Start(psi);

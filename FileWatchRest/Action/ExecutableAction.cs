@@ -23,6 +23,7 @@ public class ExecutableAction(string executablePath, List<string>? arguments, IL
         }
 
         ProcessStartInfo exec = CreateProcessStartInfo(fileEvent);
+
         Process? proc = null;
         try {
             proc = Process.Start(exec);
@@ -30,6 +31,13 @@ public class ExecutableAction(string executablePath, List<string>? arguments, IL
         catch (UnauthorizedAccessException uex) {
             if (_logger.IsEnabled(LogLevel.Error)) {
                 LoggerDelegates.ExecutableAccessDenied(_logger, _executablePath, uex);
+            }
+            return;
+        }
+        catch (FileNotFoundException fnf) {
+            // Distinct log for missing executable; include attempted path
+            if (_logger.IsEnabled(LogLevel.Error)) {
+                LoggerDelegates.ExecutableNotFound(_logger, _executablePath, fnf);
             }
             return;
         }

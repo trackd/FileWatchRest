@@ -89,6 +89,15 @@ internal static class LoggerDelegates {
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(302, "FailedToWatchFolder"), "Failed to watch folder {Folder}");
     internal static readonly Action<ILogger<FileWatcherManager>, string, Exception?> WatcherAccessDenied =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(310, "WatcherAccessDenied"), "Access denied watching folder {Folder}");
+    internal static readonly Action<ILogger<FileWatcherManager>, string, string, Exception?> FolderActionScriptMissing =
+        LoggerMessage.Define<string, string>(LogLevel.Error, new EventId(314, "FolderActionScriptMissing"), "Configured PowerShell script not found for folder {Folder}: {ScriptPath}");
+    internal static readonly Action<ILogger<FileWatcherManager>, string, string, Exception?> FolderActionExecutableMissing =
+        LoggerMessage.Define<string, string>(LogLevel.Error, new EventId(315, "FolderActionExecutableMissing"), "Configured executable not found for folder {Folder}: {ExecutablePath}");
+    // Distinct runtime-not-found events for clearer diagnostics
+    internal static readonly Action<ILogger<PowerShellScriptAction>, string, Exception?> PowerShellScriptNotFound =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(716, "PowerShellScriptNotFound"), "Configured PowerShell script not found: {ScriptPath}");
+    internal static readonly Action<ILogger<ExecutableAction>, string, Exception?> ExecutableNotFound =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(717, "ExecutableNotFound"), "Configured executable not found: {Path}");
     internal static readonly Action<ILogger<FileWatcherManager>, string, Exception?> WatcherError =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(303, "WatcherError"), "FileSystemWatcher error for folder {Folder}");
     internal static readonly Action<ILogger<FileWatcherManager>, string, int, int, Exception?> AttemptingRestart =
