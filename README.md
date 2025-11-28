@@ -136,7 +136,15 @@ If neither is provided the service falls back to the default file under `$env:Pr
 
 ## Additional Configuration Examples
 
-Below are a few small example configurations demonstrating common patterns (minimal REST action, reusable PowerShell action, mixed action types, and legacy string-array folders). These are provided here for convenience; the full runnable example is in `FileWatchRest.json.example`.  
+Below are a few small example configurations demonstrating common patterns (minimal REST action, reusable PowerShell action, mixed action types, and legacy string-array folders). These are provided here for convenience; full example files are in the `examples/` folder and a single runnable template is in `FileWatchRest.json.example`.
+
+Example files (in-repo):
+
+- `examples/FileWatchRest.example.minimal.json`: minimal REST-only example
+- `examples/FileWatchRest.example.powershell.json`: reusable PowerShell action example
+- `examples/FileWatchRest.example.mixed.json`: mixed executable + REST example
+
+Use these as starting points — copy the one you need to `FileWatchRest.json` (or point the service to it with `--config`).
 
 ### 1) Minimal single REST action (simple)
 

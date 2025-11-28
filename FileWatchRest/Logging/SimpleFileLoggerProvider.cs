@@ -17,6 +17,9 @@ public sealed partial class SimpleFileLoggerProvider : ILoggerProvider {
     private DateTime _currentLogDate = DateTime.MinValue;
     private string _currentLogFile = string.Empty;
 
+    [GeneratedRegex("(\\d{4})(?:-?)(\\d{1,2})(?:-?)(\\d{1,2})")]
+    private static partial Regex DatePattern();
+
     public SimpleFileLoggerOptions Options { get; }
 
     /// <summary>
@@ -176,36 +179,43 @@ public sealed partial class SimpleFileLoggerProvider : ILoggerProvider {
     /// <param name="directory">Directory containing log files.</param>
     /// <param name="retainedDays">Number of days to retain log files.</param>
     internal static void PurgeOldLogFilesByDate(string directory, int retainedDays) {
-        // Use UTC-based cutoff to match tests that create files using UTC timestamps
+        // Use UTC-based cutoff to match tests that create files using UTC timestamps.
         DateTime cutoff = DateTime.UtcNow.Date.AddDays(-retainedDays);
-        // Look at all files in the directory and try to extract a date token from the file name.
-        // Support common patterns like yyyyMMdd, yyyyMMdd_HHmmss and also yyyy-MM-dd for compatibility.
-        string[] files = Directory.GetFiles(directory);
-        Regex datePattern = MyRegex();
-        foreach (string file in files) {
-            try {
-                string name = Path.GetFileNameWithoutExtension(file) ?? string.Empty;
-                Match m = datePattern.Match(name);
-                if (m.Success) {
-                    // Build a yyyyMMdd token from captured groups
-                    // Pad month/day groups to ensure yyyyMMdd format
-                    string year = m.Groups[1].Value;
-                    string month = m.Groups[2].Value.PadLeft(2, '0');
-                    string day = m.Groups[3].Value.PadLeft(2, '0');
-                    string token = year + month + day; // yyyyMMdd
-                    if (DateTime.TryParseExact(token, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out DateTime fileDate)) {
-                        // Compare dates in UTC to avoid timezone skew between test creation and purge
-                        // Delete files older than or equal to the cutoff date (match test expectations)
-                        if (fileDate.Date <= cutoff) {
-                            try { File.Delete(file); } catch { }
+
+        // Use file creation time metadata rather than attempting to parse dates from filenames.
+        // This is more robust and avoids fragile regex parsing of naming patterns.
+        try {
+            Regex datePattern = DatePattern();
+            foreach (string file in Directory.GetFiles(directory)) {
+                try {
+                    var info = new FileInfo(file);
+                    DateTime createdUtc = info.CreationTimeUtc.Date;
+
+                    // Prefer file creation time when available
+                    if (createdUtc <= cutoff) {
+                        try { File.Delete(file); } catch { }
+                        continue;
+                    }
+
+                    // Fallback: try to parse a date token from the filename (legacy behavior)
+                    string name = Path.GetFileNameWithoutExtension(file) ?? string.Empty;
+                    Match m = datePattern.Match(name);
+                    if (m.Success) {
+                        string year = m.Groups[1].Value;
+                        string month = m.Groups[2].Value.PadLeft(2, '0');
+                        string day = m.Groups[3].Value.PadLeft(2, '0');
+                        string token = year + month + day; // yyyyMMdd
+                        if (DateTime.TryParseExact(token, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out DateTime fileDate)) {
+                            if (fileDate.Date <= cutoff) {
+                                try { File.Delete(file); } catch { }
+                            }
                         }
                     }
                 }
+                catch { /* best-effort per-file */ }
             }
-            catch { }
         }
-
-        // No filename normalization here — leave files as created by callers/tests.
+        catch { /* best-effort directory scan */ }
     }
 
     // Extracted core logging implementation to enable easier unit testing of logging behavior
@@ -319,6 +329,4 @@ public sealed partial class SimpleFileLoggerProvider : ILoggerProvider {
         GC.SuppressFinalize(this);
     }
 
-    [GeneratedRegex("(\\d{4})(?:-?)(\\d{1,2})(?:-?)(\\d{1,2})")]
-    private static partial Regex MyRegex();
 }

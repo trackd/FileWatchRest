@@ -3,6 +3,9 @@ namespace FileWatchRest.Services;
 public class ExecutableAction(string executablePath, List<string>? arguments) : IFolderAction {
     private readonly string _executablePath = executablePath;
     private readonly List<string>? _arguments = arguments;
+    // Test hook: when set, this delegate will be invoked instead of actually starting a process.
+    // Signature: (startInfo, cancellationToken) => Task
+    internal static Func<ProcessStartInfo, CancellationToken, Task>? StartProcessAsyncOverride;
 
     public async Task ExecuteAsync(FileEventRecord fileEvent, CancellationToken cancellationToken) {
         var args = new List<string>();
@@ -26,9 +29,14 @@ public class ExecutableAction(string executablePath, List<string>? arguments) : 
             exec.ArgumentList.Add(a);
         }
 
+        if (StartProcessAsyncOverride is not null) {
+            await StartProcessAsyncOverride(exec, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         using var proc = Process.Start(exec);
         if (proc is not null) {
-            await proc.WaitForExitAsync(cancellationToken);
+            await proc.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }

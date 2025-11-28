@@ -1,0 +1,35 @@
+﻿{
+  "Folders": [
+    {
+      "FolderPath": "C:\\temp\\watch",
+      "ActionName": "RestDefault"
+    },
+    {
+      "FolderPath": "C:\\Outgoing",
+      "ActionName": "RestAlt"
+    }
+  ],
+  "Actions": [
+    {
+      "Name": "RestDefault",
+      "ActionType": "RestPost"
+    },
+    {
+      "Name": "RestAlt",
+      "ActionType": "RestPost",
+      "ApiEndpoint": "https://api.example.net/files",
+      "PostFileContents": false
+    }
+  ],
+  "ApiEndpoint": "https://api.example.com/files",
+  "PostFileContents": true,
+  "MoveProcessedFiles": true,
+  "ProcessedFolder": "processed",
+  "AllowedExtensions": [
+    ".txt",
+    ".log"
+  ],
+  "IncludeSubdirectories": false,
+  "DebounceMilliseconds": 1000,
+  "Retries": 3
+}

@@ -27,8 +27,16 @@ if (string.IsNullOrWhiteSpace(explicitConfig)) {
 
 // Compute program data/service dir once only if we need the default path or for logging
 string programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+
+/// Todo: change logdir logic, now it is hardcoded to serviceDir, it should follow config dir.
+/// Todo: we should move much of these local functions to helper methods instead, clean up program.cs.
+
 string serviceDir = Path.Combine(programData, "FileWatchRest");
 string externalConfigPath = explicitConfig ?? Path.Combine(serviceDir, "FileWatchRest.json");
+
+// Prefer resolving file locations (logs, etc.) relative to the directory containing the external config
+// when a config path is provided. Fall back to the CommonApplicationData service dir when no config path exists.
+string configDir = Path.GetDirectoryName(externalConfigPath) ?? serviceDir;
 
 SimpleFileLoggerOptions? loggingOptions = null;
 if (File.Exists(externalConfigPath)) {
@@ -48,12 +56,12 @@ loggingOptions ??= new SimpleFileLoggerOptions {
     LogType = LogType.Csv,
     FilePathPattern = "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}",
     LogLevel = LogLevel.Information,
-    // RetainedFileCountLimit is obsolete and removed. Use RetainedDays for retention policy.
+    RetainedDays = 14
 };
 
 // Ensure logs directory exists and resolve file paths relative to CommonApplicationData when not absolute
 try {
-    _ = Directory.CreateDirectory(serviceDir);
+    Directory.CreateDirectory(serviceDir);
     string ResolvePath(string p) {
         return string.IsNullOrWhiteSpace(p)
             ? Path.Combine(serviceDir, "logs", "FileWatchRest.log")
@@ -82,9 +90,15 @@ try {
     }
 
     // Build simple file logger options (AOT-safe): map unified options
+    // Resolve FilePathPattern to an absolute path using the configuration directory as base when pattern is relative.
+    string resolvedPattern = loggingOptions.FilePathPattern ?? "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}";
+    if (!Path.IsPathRooted(resolvedPattern)) {
+        resolvedPattern = Path.Combine(configDir, resolvedPattern.Replace('/', Path.DirectorySeparatorChar));
+    }
+
     var fileLoggerOptions = new SimpleFileLoggerOptions {
         LogType = loggingOptions.LogType,
-        FilePathPattern = loggingOptions.FilePathPattern,
+        FilePathPattern = resolvedPattern,
         // RetainedFileCountLimit is obsolete and removed. Use RetainedDays for retention policy.
         LogLevel = loggingOptions.LogLevel
     };
@@ -108,7 +122,7 @@ try {
             // All configuration is now handled through the single FileWatchRest.json file
             services.AddHttpClient();
 
-            // Register services with interfaces for testability (SOLID principles)
+            // Register services with interfaces for testability
             services.AddSingleton<DiagnosticsService>();
             services.AddSingleton<IDiagnosticsService>(provider => provider.GetRequiredService<DiagnosticsService>());
 

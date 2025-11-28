@@ -19,6 +19,8 @@
         <RepositoryUrl>https://github.com/trackd/FileWatchRest</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <RepositoryBranch>main</RepositoryBranch>
+        <!-- <ServerGarbageCollection>true</ServerGarbageCollection> -->
+        <!-- <OutputType>exe</OutputType> -->
         <!--
       Native AOT settings are intentionally made conditional so regular builds and non-AOT
       publishes don't require the Native AOT toolchain (Visual C++ build tools, platform linker).

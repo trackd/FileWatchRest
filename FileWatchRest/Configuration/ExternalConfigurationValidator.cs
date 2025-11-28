@@ -26,8 +26,21 @@ public sealed class ExternalConfigurationValidator {
             }
         }
 
-        if (string.IsNullOrWhiteSpace(config.ApiEndpoint) || !Uri.TryCreate(config.ApiEndpoint, UriKind.Absolute, out _)) {
-            errors.Add(new ValidationFailure(nameof(config.ApiEndpoint), "ApiEndpoint must be a non-empty absolute URI"));
+        // Additionally, require a top-level ApiEndpoint when REST actions depend on it.
+        List<ExternalConfiguration.ActionConfig> restActions = config.Actions?.Where(a => a.ActionType == ExternalConfiguration.FolderActionType.RestPost).ToList() ?? [];
+        bool topLevelApiValid = !string.IsNullOrWhiteSpace(config.ApiEndpoint) && Uri.TryCreate(config.ApiEndpoint, UriKind.Absolute, out _);
+        if (restActions.Count > 0) {
+            // If any RestPost action does not define its own ApiEndpoint, require a valid top-level ApiEndpoint
+            if (!topLevelApiValid && restActions.Any(a => string.IsNullOrWhiteSpace(a.ApiEndpoint))) {
+                errors.Add(new ValidationFailure(nameof(config.ApiEndpoint), "ApiEndpoint must be a non-empty absolute URI when REST actions rely on the top-level default"));
+            }
+        }
+
+        // Validate each ActionConfig and any per-action overrides
+        if (config.Actions is not null) {
+            for (int ai = 0; ai < config.Actions.Count; ai++) {
+                ValidateActionConfig(config.Actions[ai], ai, errors);
+            }
         }
 
         if (string.IsNullOrWhiteSpace(config.ProcessedFolder)) {
@@ -92,11 +105,69 @@ public sealed class ExternalConfigurationValidator {
         }
 
         // AllowedExtensions is optional; empty means no extension filtering
-        if (config.AllowedExtensions is not null) {
-            for (int i = 0; i < config.AllowedExtensions.Length; i++) {
-                string ext = config.AllowedExtensions[i];
+        ValidateExtensions(config.AllowedExtensions, "AllowedExtensions", errors);
+
+        // Helper: validate each action config with reusable checks
+        static void ValidateActionConfig(ExternalConfiguration.ActionConfig action, int ai, List<ValidationFailure> errors) {
+            if (string.IsNullOrWhiteSpace(action.Name)) {
+                errors.Add(new ValidationFailure($"Actions[{ai}].Name", "Action name must be provided"));
+                return;
+            }
+
+            // Action-type specific required fields
+            switch (action.ActionType) {
+                case ExternalConfiguration.FolderActionType.RestPost:
+                    ValidateUriIfPresent(action.ApiEndpoint, $"Actions[{ai}].ApiEndpoint", errors);
+                    break;
+                case ExternalConfiguration.FolderActionType.PowerShellScript:
+                    if (string.IsNullOrWhiteSpace(action.ScriptPath)) {
+                        errors.Add(new ValidationFailure($"Actions[{ai}].ScriptPath", "ScriptPath must be provided for PowerShellScript actions"));
+                    }
+                    break;
+                case ExternalConfiguration.FolderActionType.Executable:
+                    if (string.IsNullOrWhiteSpace(action.ExecutablePath)) {
+                        errors.Add(new ValidationFailure($"Actions[{ai}].ExecutablePath", "ExecutablePath must be provided for Executable actions"));
+                    }
+                    break;
+                default:
+                    break;
+            }
+
+            // Validate per-action allowed extensions format
+            ValidateExtensions(action.AllowedExtensions, $"Actions[{ai}].AllowedExtensions", errors);
+
+            // Validate per-action exclude patterns (if present, ensure non-null entries)
+            if (action.ExcludePatterns is not null) {
+                for (int j = 0; j < action.ExcludePatterns.Length; j++) {
+                    string pat = action.ExcludePatterns[j];
+                    if (pat is null) {
+                        errors.Add(new ValidationFailure($"Actions[{ai}].ExcludePatterns[{j}]", "ExcludePatterns entries must not be null"));
+                    }
+                }
+            }
+
+            // Validate arguments array entries (if present)
+            if (action.Arguments is not null) {
+                for (int j = 0; j < action.Arguments.Count; j++) {
+                    if (action.Arguments[j] is null) {
+                        errors.Add(new ValidationFailure($"Actions[{ai}].Arguments[{j}]", "Argument entries must not be null"));
+                    }
+                }
+            }
+        }
+
+        static void ValidateUriIfPresent(string? uriValue, string propertyName, List<ValidationFailure> errors) {
+            if (!string.IsNullOrWhiteSpace(uriValue) && !Uri.TryCreate(uriValue, UriKind.Absolute, out _)) {
+                errors.Add(new ValidationFailure(propertyName, "Value must be an absolute URI when provided"));
+            }
+        }
+
+        static void ValidateExtensions(string[]? extensions, string propertyPrefix, List<ValidationFailure> errors) {
+            if (extensions is null) return;
+            for (int i = 0; i < extensions.Length; i++) {
+                string ext = extensions[i];
                 if (!string.IsNullOrWhiteSpace(ext) && !ext.StartsWith('.')) {
-                    errors.Add(new ValidationFailure($"AllowedExtensions[{i}]", "Allowed extensions must start with a '.' or be empty"));
+                    errors.Add(new ValidationFailure($"{propertyPrefix}[{i}]", "Allowed extensions must start with a '.' or be empty"));
                 }
             }
         }
@@ -104,10 +175,10 @@ public sealed class ExternalConfigurationValidator {
             errors.Add(new ValidationFailure(nameof(config.ExcludePatterns), "ExcludePatterns must be present"));
         }
 
-        string[] allowedLevels = ["Trace", "Debug", "Information", "Warning", "Error", "Critical", "None"];
+        string[] allowedLevels = Enum.GetNames<LogLevel>();
         string configuredLog = config.Logging?.LogLevel.ToString() ?? string.Empty;
         if (!allowedLevels.Contains(configuredLog)) {
-            errors.Add(new ValidationFailure("Logging.LogLevel", "LogLevel must be one of Trace, Debug, Information, Warning, Error, Critical, None"));
+            errors.Add(new ValidationFailure("Logging.LogLevel", $"LogLevel must be one of {string.Join(", ", allowedLevels)}"));
         }
 
         return new ValidationResult(errors);

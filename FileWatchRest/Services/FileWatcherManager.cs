@@ -12,7 +12,7 @@ public class FileWatcherManager(ILogger<FileWatcherManager> logger, DiagnosticsS
     /// Constructor for Moq compatibility.
     /// </summary>
     // Maps folder path to list of actions
-    private readonly Dictionary<string, List<IFolderAction>> _folderActions = new(StringComparer.OrdinalIgnoreCase);
+    internal readonly Dictionary<string, List<IFolderAction>> _folderActions = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Rebuilds the folder-to-action mapping from configuration. Call on config reload.
@@ -143,7 +143,7 @@ public class FileWatcherManager(ILogger<FileWatcherManager> logger, DiagnosticsS
     /// </summary>
     /// <param name="folder"></param>
     /// <param name="e"></param>
-    private void HandleFileEvent(string folder, FileSystemEventArgs e) {
+    internal void HandleFileEvent(string folder, FileSystemEventArgs e) {
         // Invoke the registered OnChanged handler for this folder (used by tests and consumers)
         if (_folderInfos.TryGetValue(folder, out FolderInfo? info) && info.OnChanged is not null) {
             info.OnChanged.Invoke(this, e);
