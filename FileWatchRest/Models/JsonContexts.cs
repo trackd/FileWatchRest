@@ -23,7 +23,7 @@ public class ErrorResponse {
     public string[] AvailableEndpoints { get; set; } = [];
 }
 
-[JsonSourceGenerationOptions(WriteIndented = false)]
+[JsonSourceGenerationOptions(WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(UploadMetadata))]
 [JsonSerializable(typeof(FileNotification))]
 [JsonSerializable(typeof(ExternalConfiguration))]

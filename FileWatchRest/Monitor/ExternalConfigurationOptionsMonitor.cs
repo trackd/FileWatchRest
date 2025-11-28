@@ -425,7 +425,8 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
 
     private async Task SaveConfigAsync(ExternalConfiguration cfg, CancellationToken ct) {
         try {
-            string json = JsonSerializer.Serialize(cfg, MyJsonContext.SaveOptions);
+            // Use the source-generated context for AOT/native AOT compatibility
+            string json = JsonSerializer.Serialize(cfg, MyJsonContext.Default.ExternalConfiguration);
             await File.WriteAllTextAsync(_configPath, json, ct);
             LoggerDelegates.ConfigSaved(_logger, _configPath, null);
         }
