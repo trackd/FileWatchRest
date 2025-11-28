@@ -8,7 +8,7 @@ public class ConfigurationServiceMigrationTests : IDisposable {
     [Fact]
     public async Task LoadConfigurationAsyncMigratesTopLevelLogLevelToLoggingSection() {
         string serviceName = _serviceNamePrefix + "_TopLevel";
-        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), serviceName);
+        string dir = Path.Combine(Path.GetTempPath(), serviceName);
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, "FileWatchRest.json");
 
@@ -47,7 +47,7 @@ public class ConfigurationServiceMigrationTests : IDisposable {
     [Fact]
     public async Task LoadConfigurationAsyncMigratesLoggingMinimumLevelToLoggingLogLevel() {
         string serviceName = _serviceNamePrefix + "_LegacyMinimum";
-        string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), serviceName);
+        string dir = Path.Combine(Path.GetTempPath(), serviceName);
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, "FileWatchRest.json");
 

@@ -14,7 +14,10 @@ public class FileSystemIntegrationTests {
         await File.WriteAllTextAsync(sourceFile, "integration move test");
         string targetFile = Path.Combine(watchedFolder, "moved_test.txt");
 
-        // Act: Move file into watched folder
+        // Act: Move file into watched folder (ensure we don't fail if target already exists)
+        if (File.Exists(targetFile)) {
+            File.Delete(targetFile);
+        }
         File.Move(sourceFile, targetFile);
 
         // Wait for watcher to process the file (simulate delay)

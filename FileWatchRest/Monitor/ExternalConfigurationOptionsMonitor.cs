@@ -18,6 +18,7 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
     private readonly Lock _sync = new();
     private readonly List<Action<ExternalConfiguration, string?>> _listeners = [];
 
+
     /// <summary>
     /// Test-friendly constructor: accepts explicit config path
     /// </summary>
@@ -381,8 +382,7 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
                                     }
                                 }
 
-                                var options = new JsonSerializerOptions { WriteIndented = true };
-                                string outJson = root.ToJsonString(options);
+                                string outJson = root.ToJsonString(MyJsonContext.SaveOptions);
                                 await File.WriteAllTextAsync(_configPath, outJson, ct);
                                 LoggerDelegates.ConfigSaved(_logger, _configPath, null);
                             }
@@ -425,7 +425,7 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
 
     private async Task SaveConfigAsync(ExternalConfiguration cfg, CancellationToken ct) {
         try {
-            string json = JsonSerializer.Serialize(cfg, MyJsonContext.Default.ExternalConfiguration);
+            string json = JsonSerializer.Serialize(cfg, MyJsonContext.SaveOptions);
             await File.WriteAllTextAsync(_configPath, json, ct);
             LoggerDelegates.ConfigSaved(_logger, _configPath, null);
         }
@@ -436,31 +436,21 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
     }
 
     private static ExternalConfiguration CreateDefault() {
+        // Minimal, sensible default: one watched folder and a matching action.
+        // Keep this small to avoid persisting lots of implicit defaults.
         return new ExternalConfiguration {
-            Folders = [new() { FolderPath = @"C:\temp\watch" }],
-            ApiEndpoint = "http://localhost:8080/api/files",
-            PostFileContents = false,
-            MoveProcessedFiles = false,
-            ProcessedFolder = "processed",
-            AllowedExtensions = [".txt", ".json", ".xml"],
-            ExcludePatterns = [],
-            IncludeSubdirectories = true,
-            DebounceMilliseconds = 1000,
-            Retries = 3,
-            RetryDelayMilliseconds = 500,
-            WatcherMaxRestartAttempts = 3,
-            WatcherRestartDelayMilliseconds = 1000,
-            DiscardZeroByteFiles = false,
+            Folders = [new() {
+                FolderPath = @"C:\temp\watch",
+                ActionName = "Default"
+            }],
             DiagnosticsUrlPrefix = "http://localhost:5005/",
-            ChannelCapacity = 1000,
-            MaxParallelSends = 4,
-            FileWatcherInternalBufferSize = 64 * 1024,
-            WaitForFileReadyMilliseconds = 0,
-            MaxContentBytes = 5 * 1024 * 1024,
-            StreamingThresholdBytes = 256 * 1024,
-            EnableCircuitBreaker = false,
-            CircuitBreakerFailureThreshold = 5,
-            CircuitBreakerOpenDurationMilliseconds = 30_000,
+            DiagnosticsBearerToken = null,
+            Actions = [new ExternalConfiguration.ActionConfig {
+                Name = "Default",
+                ActionType = ExternalConfiguration.FolderActionType.RestPost,
+                ApiEndpoint = "http://localhost:8080/api/files",
+                BearerToken = null,
+            }],
             Logging = new SimpleFileLoggerOptions {
                 LogType = LogType.Csv,
                 FilePathPattern = "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}",

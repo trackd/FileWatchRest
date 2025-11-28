@@ -16,6 +16,9 @@ public class PowershellScriptActionTests {
             File.Delete(outputPath);
         }
 
+        // Require the test PowerShell script to be present; fail otherwise
+        Assert.True(File.Exists(scriptPath), "PowerShell test script is missing in this environment");
+
         var testLogger = new TestLogger<PowerShellScriptAction>();
         var action = new PowerShellScriptAction(scriptPath, args, testLogger, 1000);
 
@@ -46,6 +49,9 @@ public class PowershellScriptActionTests {
         if (File.Exists(outputPath)) {
             File.Delete(outputPath);
         }
+
+        // Require the test PowerShell script to be present; fail otherwise
+        Assert.True(File.Exists(scriptPath), "PowerShell test script is missing in this environment");
 
         var testLogger = new TestLogger<PowerShellScriptAction>();
         var action = new PowerShellScriptAction(scriptPath, args, testLogger);

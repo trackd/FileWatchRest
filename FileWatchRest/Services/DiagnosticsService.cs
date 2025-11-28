@@ -84,6 +84,10 @@ public class DiagnosticsService : IDiagnosticsService {
     /// <param name="urlPrefix"></param>
     public void RestartHttpServer(string urlPrefix) {
         try {
+            // Reflect requested prefix immediately so tests can validate expected value
+            if (!string.IsNullOrWhiteSpace(urlPrefix)) {
+                _currentPrefix = urlPrefix;
+            }
             if (_httpListener is not null) {
                 try {
                     _cancellationTokenSource?.Cancel();

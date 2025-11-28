@@ -42,6 +42,7 @@ public class ConfigurationReloadTests {
         Assert.Equal(initialPrefix, diagnostics.CurrentPrefix);
 
         configMonitor.SetCurrentValue(new ExternalConfiguration { DiagnosticsUrlPrefix = updatedPrefix });
+        // Request a restart; if binding fails in this environment the prefix is still expected to be updated.
         diagnostics.RestartHttpServer(updatedPrefix);
         await Task.Delay(50);
 
