@@ -17,6 +17,7 @@ public sealed class SimpleFileLoggerOptions {
     /// </summary>
     public int RetainedDays { get; set; } = 14;
 
+    [JsonConverter(typeof(JsonStringEnumConverter<LogLevel>))]
     public LogLevel? LogLevel { get; set; }
     public SimpleFileLoggerOptions() {
         LogLevel = Microsoft.Extensions.Logging.LogLevel.Information;

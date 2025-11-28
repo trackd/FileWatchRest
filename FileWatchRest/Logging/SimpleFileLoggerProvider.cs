@@ -229,8 +229,8 @@ public sealed partial class SimpleFileLoggerProvider : ILoggerProvider {
 
             if ((Options.LogType == LogType.Json || Options.LogType == LogType.Both) && _jsonWriter is not null) {
                 try {
-                    // Use source-generated serializer (JsonSerializerContext) to be AOT/trimming-safe
-                    string json = JsonSerializer.Serialize(entry, MyJsonContext.Default.LogWriteEntry);
+                    // Use a compact (non-indented) source-generated context for NDJSON log lines
+                    string json = JsonSerializer.Serialize(entry, MyJsonLogContext.Default.LogWriteEntry);
                     _jsonWriter.WriteLine(json);
                 }
                 catch { }

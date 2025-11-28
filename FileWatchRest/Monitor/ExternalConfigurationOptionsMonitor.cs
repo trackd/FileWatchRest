@@ -416,7 +416,10 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
                 }
             }
         }
-        catch (Exception ex) {
+        catch (Exception ex) when (ex is not IOException and not UnauthorizedAccessException and not System.Security.SecurityException) {
+            // Only treat non-IO/security exceptions as decryption failures. IO/security errors
+            // during Save are already logged by SaveConfigAsync; avoid mislabeling them as
+            // decryption problems which confuses users (see many "Failed to decrypt bearer token" logs).
             LoggerDelegates.FailedToDecryptToken(_logger, ex);
         }
 
@@ -427,11 +430,50 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
         try {
             // Use the source-generated context for AOT/native AOT compatibility
             string json = JsonSerializer.Serialize(cfg, MyJsonContext.Default.ExternalConfiguration);
-            await File.WriteAllTextAsync(_configPath, json, ct);
+            await AtomicWriteTextAsync(_configPath, json, ct);
             LoggerDelegates.ConfigSaved(_logger, _configPath, null);
         }
         catch (Exception ex) {
             LoggerDelegates.FailedToSave(_logger, _configPath, ex);
+            throw;
+        }
+    }
+
+    private static async Task AtomicWriteTextAsync(string path, string content, CancellationToken ct) {
+        // Write to a temp file on the same directory then replace the target atomically when possible.
+        string dir = Path.GetDirectoryName(path) ?? string.Empty;
+        string tempFile = Path.Combine(dir, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+
+        // Ensure directory exists
+        Directory.CreateDirectory(dir);
+
+        // Write the content to a temp file first
+        await File.WriteAllTextAsync(tempFile, content, ct);
+
+        try {
+            if (File.Exists(path)) {
+                try {
+                    // Prefer File.Replace for an atomic swap when possible
+                    File.Replace(tempFile, path, null);
+                }
+                catch (IOException) {
+                    // File.Replace can fail if the destination is locked; try a force-overwrite move
+                    // Note: this may still fail if another process holds an exclusive handle.
+                    File.Move(tempFile, path, true);
+                }
+            }
+            else {
+                // Move if destination doesn't exist
+                File.Move(tempFile, path);
+            }
+        }
+        catch (PlatformNotSupportedException) {
+            // Fall back to overwrite move
+            File.Move(tempFile, path, true);
+        }
+        catch (Exception) {
+            // On any failure, attempt to clean up the temp file and rethrow so caller logs appropriately
+            try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
             throw;
         }
     }

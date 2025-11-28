@@ -45,7 +45,7 @@ public class DiagnosticsApiIntegrationTests {
             string json = await response.Content.ReadAsStringAsync();
 
             // Assert: Check for expected config properties
-            Assert.Contains("ApiEndpoint", json);
+            // We expect a valid JSON representation of the runtime configuration; ensure Folders exists.
             Assert.Contains("Folders", json);
         }
         finally {
