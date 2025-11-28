@@ -1,6 +1,12 @@
 namespace FileWatchRest.Services;
 
-public class ExecutableAction(string executablePath, List<string>? arguments, ILogger<ExecutableAction>? logger = null, int? executionTimeoutMilliseconds = null, bool ignoreOutput = false) : IFolderAction {
+public class ExecutableAction(
+        string executablePath,
+        List<string>? arguments,
+        ILogger<ExecutableAction>? logger = null,
+        int? executionTimeoutMilliseconds = 60_000,
+        bool ignoreOutput = false
+    ) : IFolderAction {
     private readonly string _executablePath = executablePath;
     private readonly List<string>? _arguments = arguments;
     private readonly ILogger<ExecutableAction> _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ExecutableAction>.Instance;

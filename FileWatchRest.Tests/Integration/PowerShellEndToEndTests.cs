@@ -1,8 +1,3 @@
-﻿using FileWatchRest.Configuration;
-using FileWatchRest.Services;
-using FileWatchRest.Tests.TestUtilities;
-using FileWatchRest.Tests.Helpers;
-
 namespace FileWatchRest.Tests.Integration;
 
 public class PowerShellEndToEndTests : IDisposable {
@@ -33,11 +28,11 @@ public class PowerShellEndToEndTests : IDisposable {
             ApiEndpoint = string.Empty,
             Actions = [
                 new() {
-                    Name = "MoveArchiveFiles",
-                    ActionType = ExternalConfiguration.FolderActionType.PowerShellScript,
-                    ScriptPath = _scriptPath,
-                    Arguments = []
-                }
+                        Name = "MoveArchiveFiles",
+                        ActionType = ExternalConfiguration.FolderActionType.PowerShellScript,
+                        ScriptPath = _scriptPath,
+                        Arguments = []
+                    }
             ]
         };
 

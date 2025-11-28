@@ -146,13 +146,13 @@ public class ExternalConfiguration {
         /// exceeds this duration it will be terminated and treated as a timeout.
         /// Default: 60000 (60 seconds) — persisted when configuration is saved.
         /// </summary>
-        public int? ExecutionTimeoutMilliseconds { get; set; } = 60_000;
+        public int? ExecutionTimeoutMilliseconds { get; set; }
 
         /// <summary>
         /// When true, action runners will drain stdout/stderr but not persist or log their contents.
         /// Useful when executing verbose binaries where output should be ignored to avoid large logs.
         /// </summary>
-        public bool? IgnoreOutput { get; set; } = false;
+        public bool? IgnoreOutput { get; set; }
 
         /// <summary>
         /// Content size settings (overrides global defaults when set)

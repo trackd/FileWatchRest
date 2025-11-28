@@ -130,7 +130,7 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
                 topLevelParsed = parsedTop;
             }
             else {
-                Match m = MyRegex().Match(json);
+                Match m = LogLevelRegex().Match(json);
                 if (m.Success && Enum.TryParse(m.Groups["lvl"].Value, true, out LogLevel parsed)) {
                     topLevelParsed = parsed;
                 }
@@ -347,20 +347,72 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
                     };
                     // Ensure action tokens are encrypted in the saved copy
                     if (cfg.Actions is not null) {
-                        copy.Actions = [.. cfg.Actions.Select(a => new ExternalConfiguration.ActionConfig {
-                            Name = a.Name,
-                            ActionType = a.ActionType,
-                            ScriptPath = a.ScriptPath,
-                            ExecutablePath = a.ExecutablePath,
-                            Arguments = a.Arguments,
-                            ApiEndpoint = a.ApiEndpoint,
-                            BearerToken = string.IsNullOrWhiteSpace(a.BearerToken) ? a.BearerToken : SecureConfigurationHelper.EnsureTokenIsEncrypted(a.BearerToken),
-                            PostFileContents = a.PostFileContents,
-                            MoveProcessedFiles = a.MoveProcessedFiles,
-                            IncludeSubdirectories = a.IncludeSubdirectories
-                        })];
+                        // Prefer to preserve the original Actions JSON as-is, only modifying tokens to be encrypted.
+                        // If we parsed a JsonDocument of the source, use it as the baseline so we don't add
+                        // properties that weren't present in the original file.
+                        if (doc is not null) {
+                            var root = JsonNode.Parse(json);
+                            if (root is JsonObject rootObj) {
+                                // Use cfg as the source-of-truth for token updates so we don't change other fields.
+                                if (!string.IsNullOrWhiteSpace(cfg.BearerToken) && rootObj.TryGetPropertyValue("BearerToken", out _)) {
+                                    rootObj["BearerToken"] = SecureConfigurationHelper.EnsureTokenIsEncrypted(cfg.BearerToken);
+                                }
+
+                                if (!string.IsNullOrWhiteSpace(cfg.DiagnosticsBearerToken) && rootObj.TryGetPropertyValue("DiagnosticsBearerToken", out _)) {
+                                    rootObj["DiagnosticsBearerToken"] = SecureConfigurationHelper.EnsureTokenIsEncrypted(cfg.DiagnosticsBearerToken);
+                                }
+
+                                // Update per-action tokens by matching action Name; leave actions untouched otherwise
+                                if (cfg.Actions is not null && rootObj.TryGetPropertyValue("Actions", out JsonNode? actionsNode) && actionsNode is JsonArray actionsArr) {
+                                    // Build lookup of action-name -> encrypted token for actions that actually have tokens
+                                    var actionTokenMap = cfg.Actions
+                                        .Where(a => !string.IsNullOrWhiteSpace(a.Name) && !string.IsNullOrWhiteSpace(a.BearerToken))
+                                        .ToDictionary(a => a.Name!, a => SecureConfigurationHelper.EnsureTokenIsEncrypted(a.BearerToken!));
+
+                                    if (actionTokenMap.Count > 0) {
+                                        foreach (JsonNode? actionNode in actionsArr) {
+                                            if (actionNode is JsonObject actionObj && actionObj.TryGetPropertyValue("Name", out JsonNode? nameNode) && nameNode is JsonValue) {
+                                                string? nameVal = nameNode.GetValue<string?>();
+                                                if (!string.IsNullOrWhiteSpace(nameVal) && actionTokenMap.TryGetValue(nameVal, out string? encrypted)) {
+                                                    actionObj["BearerToken"] = encrypted;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                var options = new JsonSerializerOptions { WriteIndented = true };
+                                string outJson = root.ToJsonString(options);
+                                await File.WriteAllTextAsync(_configPath, outJson, ct);
+                                LoggerDelegates.ConfigSaved(_logger, _configPath, null);
+                            }
+                            else {
+                                // fallback: couldn't get a mutable JsonObject for the original
+                                // document. Write a minimal sensible actions copy to avoid
+                                // introducing unrelated or default-valued fields.
+                                copy.Actions = [.. cfg.Actions.Select(a => new ExternalConfiguration.ActionConfig {
+                                    Name = a.Name,
+                                    ActionType = a.ActionType,
+                                    Arguments = a.Arguments,
+                                    BearerToken = string.IsNullOrWhiteSpace(a.BearerToken) ? a.BearerToken : SecureConfigurationHelper.EnsureTokenIsEncrypted(a.BearerToken)
+                                })];
+                                await SaveConfigAsync(copy, ct);
+                            }
+                        }
+                        else {
+                            // Fallback: minimal sensible actions copy (avoid mixing unrelated fields)
+                            copy.Actions = [.. cfg.Actions.Select(a => new ExternalConfiguration.ActionConfig {
+                                Name = a.Name,
+                                ActionType = a.ActionType,
+                                Arguments = a.Arguments,
+                                BearerToken = string.IsNullOrWhiteSpace(a.BearerToken) ? a.BearerToken : SecureConfigurationHelper.EnsureTokenIsEncrypted(a.BearerToken)
+                            })];
+                            await SaveConfigAsync(copy, ct);
+                        }
                     }
-                    await SaveConfigAsync(copy, ct);
+                    else {
+                        await SaveConfigAsync(copy, ct);
+                    }
                 }
             }
         }
@@ -370,8 +422,6 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
 
         return cfg;
     }
-
-    private async Task SaveConfigAsync(ExternalConfiguration cfg) => await SaveConfigAsync(cfg, CancellationToken.None);
 
     private async Task SaveConfigAsync(ExternalConfiguration cfg, CancellationToken ct) {
         try {
@@ -420,5 +470,5 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
     }
 
     [GeneratedRegex("\"LogLevel\"\\s*:\\s*\"(?<lvl>[A-Za-z]+)\"")]
-    private static partial Regex MyRegex();
+    private static partial Regex LogLevelRegex();
 }

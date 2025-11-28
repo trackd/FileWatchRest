@@ -1,12 +1,12 @@
 namespace FileWatchRest.Services;
 
 public class PowerShellScriptAction(
-    string scriptPath,
-    List<string>? arguments = null,
-    ILogger<PowerShellScriptAction>? logger = null,
-    int? executionTimeoutMilliseconds = null,
-    bool ignoreOutput = false,
-    Func<string, string?>? executableResolver = null
+        string scriptPath,
+        List<string>? arguments = null,
+        ILogger<PowerShellScriptAction>? logger = null,
+        int? executionTimeoutMilliseconds = 60_000,
+        bool ignoreOutput = false,
+        Func<string, string?>? executableResolver = null
     ) : IFolderAction {
     private readonly string _scriptPath = scriptPath;
     private readonly List<string>? _arguments = arguments;

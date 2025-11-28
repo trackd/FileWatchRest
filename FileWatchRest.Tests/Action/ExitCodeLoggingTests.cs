@@ -1,4 +1,4 @@
-﻿namespace FileWatchRest.Tests.Action;
+namespace FileWatchRest.Tests.Action;
 
 public class ExitCodeLoggingTests {
     [Fact]
