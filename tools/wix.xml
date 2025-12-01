@@ -1,0 +1,31 @@
+﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+    <Package Name="FileWatchRest" Language="1033" Version="$(var.MSI_VERSION)" Manufacturer="FileWatchRest" UpgradeCode="$(var.UPGRADE_GUID)" InstallerVersion="200">
+        <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+        <MediaTemplate EmbedCab="yes" />
+
+        <StandardDirectory Id="ProgramFiles64Folder">
+            <Directory Id="INSTALLFOLDER" Name="FileWatchRest" />
+        </StandardDirectory>
+
+        <StandardDirectory Id="CommonAppDataFolder">
+            <Directory Id="CONFIGFOLDER" Name="FileWatchRest" />
+        </StandardDirectory>
+
+        <Feature Id="ProductFeature" Title="FileWatchRest" Level="1">
+            <ComponentGroupRef Id="ProductComponents" />
+            <ComponentGroupRef Id="ConfigComponents" />
+        </Feature>
+    </Package>
+
+    <!-- Product components are provided by generated fragment 'ProductFiles.wxs' -->
+
+    <Fragment>
+        <ComponentGroup Id="ConfigComponents" Directory="CONFIGFOLDER">
+            <Component Id="ConfigDirectory">
+                <CreateFolder />
+                <RemoveFolder Id="RemoveConfigFolder" On="uninstall" />
+                <RegistryValue Root="HKLM" Key="Software\FileWatchRest" Name="ConfigPath" Type="string" Value="[CONFIGFOLDER]" KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+    </Fragment>
+</Wix>

@@ -36,3 +36,4 @@ artifacts/
 # dummy folder atm
 docs/
 coverage/
+!tools/wix.xml
