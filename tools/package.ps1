@@ -51,6 +51,32 @@ Write-Host '==> FileWatchRest Packaging' -ForegroundColor Cyan
 $CreateMsi = -not $NoMsi
 $CreateZip = -not $NoZip
 
+# ensure wix is available if MSI creation is requested
+if ($CreateMsi) {
+    $wixAvailable = $false
+    try {
+        & wix --version | Out-Null
+        $wixAvailable = $true
+    }
+    catch { $wixAvailable = $false }
+
+    if (-not $wixAvailable) {
+        Write-Host 'WiX CLI not found; attempting to install dotnet global tool wix (v6.0.2)...' -ForegroundColor Yellow
+        try {
+            dotnet tool install --global wix --version 6.0.2
+            # ensure global tools path is in PATH for this session
+            $dotnetToolPath = "$env:USERPROFILE\.dotnet\tools"
+            if (Test-Path $dotnetToolPath) { $env:PATH = "$dotnetToolPath;$env:PATH" }
+            wix extension add -g WixToolset.Util.wixext
+            Write-Host 'WiX installed.' -ForegroundColor Green
+        }
+        catch {
+            Write-Warning "Failed to install WiX tool: $_. MSI packaging will be skipped."
+            $CreateMsi = $false
+        }
+    }
+}
+
 # Note: don't require publish directory for source ZIP or docs packaging.
 # We'll only require it for packaging publish artifacts (MSI or publish ZIP).
 $Parent = Split-Path $PSScriptRoot -Parent

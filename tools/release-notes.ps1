@@ -79,15 +79,38 @@ if (-not $CommitSha) {
     }
 }
 
-# Get last tag
+# Determine tags and the previous tag (the tag before HEAD if HEAD is tagged)
 $lastTag = $null
 try {
-    $lastTag = git describe --tags --abbrev=0 2>$null
-    if ($lastTag) {
-        Write-Host "Last tag: $lastTag" -ForegroundColor Gray
+    $tags = @()
+    $rawTags = git for-each-ref --sort=-creatordate --format '%(refname:short)' refs/tags 2>$null
+    if ($rawTags) { $tags = $rawTags -split "`n" | Where-Object { $_ } }
+
+    # Tags pointing at HEAD (may be empty)
+    $currentTagsRaw = git tag --points-at HEAD 2>$null
+    $currentTags = @()
+    if ($currentTagsRaw) { $currentTags = $currentTagsRaw -split "`n" | Where-Object { $_ } }
+
+    if ($currentTags.Count -gt 0 -and $tags.Count -gt 0) {
+        $currentTag = $currentTags[0]
+        $idx = $tags.IndexOf($currentTag)
+        if ($idx -ge 0 -and ($idx + 1) -lt $tags.Count) {
+            $lastTag = $tags[$idx + 1]
+        }
+        else {
+            # No previous tag (this is the first tag)
+            $lastTag = $null
+        }
     }
-} catch {
-    Write-Host "No previous tags found" -ForegroundColor Gray
+    else {
+        # Use the most recent tag as the baseline if HEAD is not tagged
+        if ($tags.Count -gt 0) { $lastTag = $tags[0] }
+    }
+
+    if ($lastTag) { Write-Host "Last tag: $lastTag" -ForegroundColor Gray } else { Write-Host "No previous tag found" -ForegroundColor Gray }
+}
+catch {
+    Write-Host "Failed to determine tags: $_" -ForegroundColor Gray
 }
 
 # Generate commit list
@@ -108,7 +131,7 @@ try {
     Write-Warning "Failed to retrieve git history: $_"
 }
 
-if ($commits.Count -eq 0) {
+if (@($commits).Count -eq 0) {
     $commits = @("- Initial release")
 }
 
