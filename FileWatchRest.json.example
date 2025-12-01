@@ -57,15 +57,11 @@
   ],
   "ExcludePatterns": [
     "Backup_*",
-            "ExecutionTimeoutMilliseconds": 60000,
-            "IgnoreOutput": false,
     "*_temp*",
     "*.bak"
   ],
   "IncludeSubdirectories": true,
   "DebounceMilliseconds": 1000,
-            "ExecutionTimeoutMilliseconds": 60000,
-            "IgnoreOutput": false,
   "Retries": 3,
   "RetryDelayMilliseconds": 500,
   "WatcherMaxRestartAttempts": 3,

@@ -12,23 +12,27 @@
   "Actions": [
     {
       "Name": "RestDefault",
-      "ActionType": "RestPost"
+      "ActionType": "RestPost",
+      "AllowedExtensions": [
+        ".txt",
+        ".log"
+      ]
     },
     {
       "Name": "RestAlt",
       "ActionType": "RestPost",
       "ApiEndpoint": "https://api.example.net/files",
-      "PostFileContents": false
+      "PostFileContents": false,
+      "AllowedExtensions": [
+        ".csv"
+      ]
     }
   ],
   "ApiEndpoint": "https://api.example.com/files",
   "PostFileContents": true,
   "MoveProcessedFiles": true,
   "ProcessedFolder": "processed",
-  "AllowedExtensions": [
-    ".txt",
-    ".log"
-  ],
+  "AllowedExtensions": [],
   "IncludeSubdirectories": false,
   "DebounceMilliseconds": 1000,
   "Retries": 3

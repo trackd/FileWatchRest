@@ -271,9 +271,13 @@ Configuration Options
 
 Precedence and overrides:
 
-- Settings defined on an `ActionConfig` override global settings in the root object for folders that reference that action.
-- Global settings (top-level keys such as `ApiEndpoint`, `Retries`, `MoveProcessedFiles`, etc.) provide defaults that apply when the `ActionConfig` does not set a specific value.
-- `Folders` are intentionally lightweight (path + `ActionName`) to encourage reuse and centralized action configuration.
+- Settings on an `ActionConfig` override global settings for any folder mapped to that action.
+- Global (root) settings are defaults used when an action does not specify a value.
+- `Folders` are intentionally lightweight (path + `ActionName`) and do not carry overrides.
+- Arrays and null/empty semantics:
+  - If a global collection (e.g., `AllowedExtensions`, `ExcludePatterns`) is null or empty, it means “no filtering” unless the action provides values.
+  - If an action provides a collection, it fully defines the behavior for that folder mapping.
+  - If an action explicitly provides an empty collection, it disables that filter for that action (e.g., empty `AllowedExtensions` means all files allowed).
 - `ApiEndpoint`: HTTP endpoint to POST file notifications to
 - `BearerToken`: Bearer token for API authentication. **Automatically encrypted** using
   machine-specific encryption when saved. Plain text tokens are automatically encrypted on first  

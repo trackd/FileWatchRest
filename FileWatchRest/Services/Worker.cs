@@ -248,7 +248,7 @@ public partial class Worker : BackgroundService {
         while (sw.ElapsedMilliseconds < waitMs) {
             try {
                 // Try to open for read to ensure the writer has released any exclusive locks
-                using FileStream fs = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                await using FileStream fs = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
 
                 if (!cfg.PostFileContents) {
                     // We don't need content - file is considered ready if it can be opened
@@ -608,6 +608,7 @@ public partial class Worker : BackgroundService {
     /// Get the effective configuration for a file path by merging action settings with global defaults.
     /// Precedence: action-level setting > global default.
     /// </summary>
+    /// <param name="path"></param>
     private ExternalConfiguration GetConfigForPath(string path) {
         // Find the most specific matching folder (longest path) that is a prefix of the file path
         ExternalConfiguration.WatchedFolderConfig? folder = null;
@@ -634,7 +635,7 @@ public partial class Worker : BackgroundService {
         // If no action found, return global config as-is
         if (action is null) return CurrentConfig;
 
-        // Merge action settings with global defaults
+        // Merge settings with precedence: action settings > global defaults
         return new ExternalConfiguration {
             // Action-specific settings (REST API)
             ApiEndpoint = action.ApiEndpoint ?? CurrentConfig.ApiEndpoint,
@@ -644,8 +645,13 @@ public partial class Worker : BackgroundService {
             PostFileContents = action.PostFileContents ?? CurrentConfig.PostFileContents,
             MoveProcessedFiles = action.MoveProcessedFiles ?? CurrentConfig.MoveProcessedFiles,
             ProcessedFolder = action.ProcessedFolder ?? CurrentConfig.ProcessedFolder,
-            AllowedExtensions = action.AllowedExtensions ?? CurrentConfig.AllowedExtensions,
-            ExcludePatterns = action.ExcludePatterns ?? CurrentConfig.ExcludePatterns,
+            // Array properties: Explicit null check preserves empty array semantics.
+            // - null action value → use global (not specified)
+            // - empty action array [] → use empty (explicitly disable filtering)
+            // - populated action array → use action values
+            // Note: Cannot use ?? operator because empty arrays are non-null objects (Length=0).
+            AllowedExtensions = (action.AllowedExtensions is not null) ? action.AllowedExtensions : CurrentConfig.AllowedExtensions,
+            ExcludePatterns = (action.ExcludePatterns is not null) ? action.ExcludePatterns : CurrentConfig.ExcludePatterns,
             IncludeSubdirectories = action.IncludeSubdirectories ?? CurrentConfig.IncludeSubdirectories,
 
             // Timing and retry settings

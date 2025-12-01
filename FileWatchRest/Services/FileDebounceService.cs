@@ -18,9 +18,10 @@ public class FileDebounceService(
 
     /// <summary>
     /// Schedule a file path for debounced processing.
+    /// Made virtual to enable testing scenarios to intercept scheduling.
     /// </summary>
     /// <param name="path"></param>
-    public void Schedule(string path) => _pending.AddOrUpdate(path, DateTime.UtcNow, (_, __) => DateTime.UtcNow);
+    public virtual void Schedule(string path) => _pending.AddOrUpdate(path, DateTime.UtcNow, (_, __) => DateTime.UtcNow);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         LoggerDelegates.FileDebounceStarted(_logger, null);
