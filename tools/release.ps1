@@ -103,23 +103,28 @@ $rlssplat = @{
 
 # Optional: publish to GitHub Releases when running in CI or when requested
 if ($EnablePublish) {
-    Write-Host '==> Publishing release to GitHub (gh CLI)' -ForegroundColor Cyan
-    $gh = Get-Command gh -ErrorAction SilentlyContinue
-    if (-not $gh) {
-        Write-Warning 'gh CLI not found; skipping GitHub release upload. Install from https://cli.github.com/'
+    if ($env:CI) {
+        Write-Host 'CI run detected — skipping in-script gh publish. Workflow will create the release.' -ForegroundColor Gray
     }
     else {
-        $tag = "v$Version"
-        $notesPath = Join-Path "$parent/artifacts" 'release_notes.md'
-        $notes = ''
-        if (Test-Path $notesPath) { $notes = Get-Content $notesPath -Raw }
-        $files = Get-ChildItem -Path "$parent/artifacts" -File | ForEach-Object { $_.FullName }
-        try {
-            & gh release create $tag @files --title $tag --notes "$notes"
-            Write-Host "Published GitHub release: $tag" -ForegroundColor Green
+        Write-Host '==> Publishing release to GitHub (gh CLI)' -ForegroundColor Cyan
+        $gh = Get-Command gh -ErrorAction SilentlyContinue
+        if (-not $gh) {
+            Write-Warning 'gh CLI not found; skipping GitHub release upload. Install from https://cli.github.com/'
         }
-        catch {
-            Write-Warning "Failed to publish release via gh: $_"
+        else {
+            $tag = "v$Version"
+            $notesPath = Join-Path "$parent/artifacts" 'release_notes.md'
+            $notes = ''
+            if (Test-Path $notesPath) { $notes = Get-Content $notesPath -Raw }
+            $files = Get-ChildItem -Path "$parent/artifacts" -File | ForEach-Object { $_.FullName }
+            try {
+                & gh release create $tag @files --title $tag --notes "$notes"
+                Write-Host "Published GitHub release: $tag" -ForegroundColor Green
+            }
+            catch {
+                Write-Warning "Failed to publish release via gh: $_"
+            }
         }
     }
 }
