@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 <#
 Package the app for deployment on target machine and produce output folder with helper installer script
 Usage:
@@ -9,16 +10,27 @@ Parameters:
 #>
 param(
     [string]$ProjectPath = 'FileWatchRest',
-    [string]$OutputDir = '.\output'
+    [string]$OutputDir = '.\output',
+    [Switch] $VersionBump
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+if ($VersionBump) {
+    # bump version before building
+    $bumpScript = Join-Path $PSScriptRoot "bump-version.ps1"
+    if (-not (Test-Path $bumpScript)) {
+        Write-Warning "bump-version.ps1 not found at: $bumpScript"
+    } else {
+        & $bumpScript
+    }
+}
+
 $configuration = 'Release'
 $rid = 'win-x64'
 
-$publishDir = Join-Path -Path $ProjectPath -ChildPath "bin\$configuration\net10.0\$rid\publish"
+$publishDir = Join-Path -Path $ProjectPath -ChildPath "bin/$configuration/net10.0/$rid/publish"
 
 # publish
 $publishFlags = @('-c', $configuration, '-r', $rid)
