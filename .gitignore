@@ -31,3 +31,8 @@ Thumbs.db
 Copilot-Processing.md
 format-report.json
 .github/copilot-instructions.md
+publish/
+artifacts/
+# dummy folder atm
+docs/
+coverage/

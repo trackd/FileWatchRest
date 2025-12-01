@@ -12,11 +12,15 @@ namespace FileWatchRest.Services;
 /// The adapter loads configuration synchronously during DI container construction
 /// and propagates file-change notifications to IOptionsMonitor subscribers.
 /// </summary>
-public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<ExternalConfiguration> {
+public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<ExternalConfiguration>, IDisposable {
     private readonly ILogger<ExternalConfigurationOptionsMonitor> _logger;
     private readonly string _configPath;
     private readonly Lock _sync = new();
     private readonly List<Action<ExternalConfiguration, string?>> _listeners = [];
+    private readonly FileSystemWatcher? _watcher;
+    private readonly FileSystemEventHandler? _changedHandler;
+    private readonly FileSystemEventHandler? _createdHandler;
+    private readonly RenamedEventHandler? _renamedHandler;
 
 
     /// <summary>
@@ -42,27 +46,48 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
         try {
             string directory = Path.GetDirectoryName(_configPath) ?? string.Empty;
             string file = Path.GetFileName(_configPath);
-            var watcher = new FileSystemWatcher(directory) {
+            _watcher = new FileSystemWatcher(directory) {
                 Filter = file,
                 NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.CreationTime | NotifyFilters.Size
             };
 
-            async void handle(object sender, FileSystemEventArgs args) {
+            // Create handlers as fields so they can be unsubscribed and disposed later
+            _changedHandler = async (sender, args) => {
                 // debounce slightly
-                await Task.Delay(150);
-                try {
-                    ExternalConfiguration newCfg = await LoadAndMigrateAsync(CancellationToken.None);
-                    lock (_sync) { CurrentValue = newCfg; }
-                    NotifyListeners(newCfg);
+                await Task.Delay(150).ConfigureAwait(false);
+                // Try a few times to load the updated file to account for platform timing
+                const int maxAttempts = 6;
+                int attempt = 0;
+                while (attempt++ < maxAttempts) {
+                    try {
+                        ExternalConfiguration newCfg = await LoadAndMigrateAsync(CancellationToken.None).ConfigureAwait(false);
+                        lock (_sync) { CurrentValue = newCfg; }
+                        NotifyListeners(newCfg);
+                        break;
+                    }
+                    catch (IOException) {
+                        // File may still be locked by writer; wait a bit and retry
+                        await Task.Delay(100).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) {
+                        LoggerDelegates.ErrorHandlingConfigChange(_logger, ex);
+                        break;
+                    }
                 }
-                catch (Exception ex) {
-                    LoggerDelegates.ErrorHandlingConfigChange(_logger, ex);
-                }
-            }
+            };
 
-            watcher.Changed += handle;
-            watcher.Created += handle;
-            watcher.EnableRaisingEvents = true;
+            _createdHandler = _changedHandler;
+            _renamedHandler = (s, e) => {
+                // Translate RenamedEventArgs to FileSystemEventArgs for the common handler
+                string dir = Path.GetDirectoryName(e.FullPath) ?? string.Empty;
+                var fse = new FileSystemEventArgs(WatcherChangeTypes.Renamed, dir, e.Name);
+                _changedHandler?.Invoke(s, fse);
+            };
+
+            _watcher.Changed += _changedHandler;
+            _watcher.Created += _createdHandler;
+            _watcher.Renamed += _renamedHandler;
+            _watcher.EnableRaisingEvents = true;
         }
         catch (Exception ex) {
             LoggerDelegates.FailedToStartWatcherConfig(_logger, ex);
@@ -504,4 +529,23 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
 
     [GeneratedRegex("\"LogLevel\"\\s*:\\s*\"(?<lvl>[A-Za-z]+)\"")]
     private static partial Regex LogLevelRegex();
+
+    public void Dispose() {
+        try {
+            if (_watcher is not null) {
+                try {
+                    if (_changedHandler is not null) _watcher.Changed -= _changedHandler;
+                    if (_createdHandler is not null) _watcher.Created -= _createdHandler;
+                    if (_renamedHandler is not null) _watcher.Renamed -= _renamedHandler;
+                }
+                catch { /* best-effort */ }
+
+                try { _watcher.EnableRaisingEvents = false; } catch { }
+                try { _watcher.Dispose(); } catch { }
+            }
+        }
+        finally {
+            GC.SuppressFinalize(this);
+        }
+    }
 }

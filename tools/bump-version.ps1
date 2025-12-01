@@ -21,42 +21,71 @@
 #>
 [CmdletBinding()]
 param(
+    [Parameter(Position=0)]
+    [string]$TargetVersion,
     [switch]$Major,
     [switch]$Minor,
     [switch]$Commit,
-    [switch]$Amend
+    [switch]$Amend,
+    [switch]$NoUpdate
 )
 
 $ErrorActionPreference = 'Stop'
 
-$projectFile = Join-Path $PSScriptRoot "../FileWatchRest/FileWatchRest.csproj"
+$Parent = Split-Path $PSScriptRoot -Parent
+$projectFile = Join-Path $Parent 'FileWatchRest' 'FileWatchRest.csproj'
 
+Write-Host $projectFile
 if (-not (Test-Path $projectFile)) {
     Write-Error "Project file not found: $projectFile"
     exit 1
 }
 
 # Load project file as XML
-[xml]$xml = Get-Content $projectFile
+[xml]$xml = Get-Content -Path $projectFile -Raw
 
-# Find the Version element
-$versionNode = $xml.Project.PropertyGroup.Version | Where-Object { $null -ne $_ } | Select-Object -First 1
+# Find the Version element (robust, avoid property-access that fails under StrictMode)
+$versionString = $null
+$versionNode = $xml.SelectSingleNode('//Project/PropertyGroup/Version')
+if ($null -ne $versionNode) {
+    $versionString = $versionNode.InnerText.Trim()
+}
+else {
+    $pgs = $xml.Project.SelectNodes('PropertyGroup')
+    foreach ($pg in $pgs) {
+        $vn = $pg.SelectSingleNode('Version')
+        if ($null -ne $vn) { $versionString = $vn.InnerText.Trim(); break }
+    }
+}
 
-if (-not $versionNode) {
+if (-not $versionString) {
     Write-Error "Could not find <Version> element in project file"
     exit 1
 }
 
 # Try parsing as semver first, fallback to version
 $semVer = [semver]::new(0, 0, 0, 0)
-$useSemanticVersion = [semver]::TryParse($versionNode, [ref]$semVer)
 
-if (-not $useSemanticVersion) {
-    # Fallback to [version] type
-    $version = [version]::new()
-    if (-not [version]::TryParse($versionNode, [ref]$version)) {
-        Write-Error "Could not parse version: $versionNode"
-        exit 1
+# If a target version was passed positionally, honor it instead of reading/incrementing
+if ($TargetVersion) {
+    $useSemanticVersion = [semver]::TryParse($TargetVersion, [ref]$semVer)
+    if (-not $useSemanticVersion) {
+        $version = [version]::new()
+        if (-not [version]::TryParse($TargetVersion, [ref]$version)) {
+            Write-Error "Could not parse provided target version: $TargetVersion"
+            exit 1
+        }
+    }
+}
+else {
+    $useSemanticVersion = [semver]::TryParse($versionString, [ref]$semVer)
+    if (-not $useSemanticVersion) {
+        # Fallback to [version] type
+        $version = [version]::new()
+        if (-not [version]::TryParse($versionString, [ref]$version)) {
+            Write-Error "Could not parse version: $versionString"
+            exit 1
+        }
     }
 }
 
@@ -101,50 +130,107 @@ Write-Host $oldVersion -ForegroundColor Yellow -NoNewline
 Write-Host " -> " -NoNewline
 Write-Host $newVersion -ForegroundColor Green
 
-# Update all version nodes in XML
-foreach ($propertyGroup in $xml.Project.PropertyGroup) {
-    if ($propertyGroup.Version) {
-        $propertyGroup.Version = $newVersionObj.ToString()
+# Update only the PropertyGroup(s) that already contain version information (Version/AssemblyVersion/FileVersion)
+$pgs = $xml.Project.SelectNodes("PropertyGroup[Version or AssemblyVersion or FileVersion]")
+if ($pgs.Count -eq 0) {
+    # fallback: pick the first PropertyGroup if present, otherwise create one
+    $allPgs = $xml.Project.SelectNodes('PropertyGroup')
+    if ($allPgs.Count -gt 0) {
+        $pgs = @($allPgs.Item(0))
     }
-    if ($propertyGroup.AssemblyVersion) {
-        $propertyGroup.AssemblyVersion = $newVersionObj.ToString()
-    }
-    if ($propertyGroup.FileVersion) {
-        # FileVersion always needs 4 parts for .NET
-        if ($useSemanticVersion) {
-            $propertyGroup.FileVersion = "$($newVersionObj.ToString()).0"
-        }
-        else {
-            $propertyGroup.FileVersion = [version]::new($newVersionObj.Major, $newVersionObj.Minor, $newVersionObj.Build, 0).ToString()
-        }
+    else {
+        $newPg = $xml.CreateElement('PropertyGroup')
+        $xml.Project.AppendChild($newPg) | Out-Null
+        $pgs = @($newPg)
     }
 }
 
-# Save XML back to file (preserving formatting)
-$xml.Save($projectFile)
+# Compute FileVersion value once
+if ($useSemanticVersion) {
+    $baseVer = $newVersionObj.ToString().Split('+')[0].Split('-')[0]
+    $parts = $baseVer.Split('.') | ForEach-Object { $_ }
+    while ($parts.Count -lt 3) { $parts += '0' }
+    $fileVersionV = "$($parts[0]).$($parts[1]).$($parts[2]).0"
+}
+else {
+    $fileVersionV = [version]::new($newVersionObj.Major, $newVersionObj.Minor, $newVersionObj.Build, 0).ToString()
+}
 
-Write-Host "✓ Updated $projectFile" -ForegroundColor Green
-
-# Handle git operations based on context
-if ($Commit -or $Amend) {
-    git add $projectFile
-    if ($Amend) {
-        git commit --amend --no-edit --no-verify
-        Write-Host "✓ Amended commit with version bump" -ForegroundColor Green
+foreach ($propertyGroup in $pgs) {
+    # Version
+    $vn = $propertyGroup.SelectSingleNode('Version')
+    if ($null -ne $vn) {
+        $vn.InnerText = $newVersionObj.ToString()
     }
     else {
-        git commit -m "chore: bump version to $newVersion"
-        Write-Host "✓ Committed version bump" -ForegroundColor Green
+        $newNode = $xml.CreateElement('Version')
+        $newNode.InnerText = $newVersionObj.ToString()
+        $propertyGroup.AppendChild($newNode) | Out-Null
+    }
+
+    # AssemblyVersion
+    $av = $propertyGroup.SelectSingleNode('AssemblyVersion')
+    if ($null -ne $av) { $av.InnerText = $newVersionObj.ToString() }
+    else {
+        $newAv = $xml.CreateElement('AssemblyVersion')
+        $newAv.InnerText = $newVersionObj.ToString()
+        $propertyGroup.AppendChild($newAv) | Out-Null
+    }
+
+    # FileVersion
+    $fvNode = $propertyGroup.SelectSingleNode('FileVersion')
+    if ($null -ne $fvNode) { $fvNode.InnerText = $fileVersionV }
+    else {
+        $newFv = $xml.CreateElement('FileVersion')
+        $newFv.InnerText = $fileVersionV
+        $propertyGroup.AppendChild($newFv) | Out-Null
+    }
+}
+
+# Save XML back to file (preserving formatting), unless NoUpdate (dry-run) was requested
+if (-not $NoUpdate) {
+    $xml.Save($projectFile)
+    Write-Host "✓ Updated $projectFile" -ForegroundColor Green
+}
+else {
+    Write-Host "Dry-run: -NoUpdate specified; skipping write to $projectFile" -ForegroundColor Yellow
+    Write-Host "Proposed updates:" -ForegroundColor Yellow
+    foreach ($propertyGroup in $xml.Project.SelectNodes('PropertyGroup')) {
+        $v = $propertyGroup.SelectSingleNode('Version')
+        if ($null -ne $v) { Write-Host "  Version: $($v.InnerText)" }
+        $av = $propertyGroup.SelectSingleNode('AssemblyVersion')
+        if ($null -ne $av) { Write-Host "  AssemblyVersion: $($av.InnerText)" }
+        $fv = $propertyGroup.SelectSingleNode('FileVersion')
+        if ($null -ne $fv) { Write-Host "  FileVersion: $($fv.InnerText)" }
+    }
+    return $newVersionObj
+}
+
+# Handle git operations based on context (skip when NoUpdate/dry-run)
+if (-not $NoUpdate) {
+    if ($Commit -or $Amend) {
+        git add $projectFile
+        if ($Amend) {
+            git commit --amend --no-edit --no-verify
+            Write-Host "✓ Amended commit with version bump" -ForegroundColor Green
+        }
+        else {
+            git commit -m "chore: bump version to $newVersion"
+            Write-Host "✓ Committed version bump" -ForegroundColor Green
+        }
+    }
+    else {
+        # When run from pre-commit hook, auto-stage the file
+        $gitStatus = git status --porcelain $projectFile 2>$null
+        if ($gitStatus) {
+            git add $projectFile
+            Write-Host "✓ Staged version bump for commit" -ForegroundColor Green
+        }
+        else {
+            Write-Host "Run with -Commit to create new commit or -Amend to amend existing commit" -ForegroundColor Cyan
+        }
     }
 }
 else {
-    # When run from pre-commit hook, auto-stage the file
-    $gitStatus = git status --porcelain $projectFile 2>$null
-    if ($gitStatus) {
-        git add $projectFile
-        Write-Host "✓ Staged version bump for commit" -ForegroundColor Green
-    }
-    else {
-        Write-Host "Run with -Commit to create new commit or -Amend to amend existing commit" -ForegroundColor Cyan
-    }
+    Write-Host "Dry-run: -NoUpdate specified; skipping git operations." -ForegroundColor Yellow
 }

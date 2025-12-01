@@ -304,8 +304,7 @@ Precedence and overrides:
 - `WatcherRestartDelayMilliseconds`: Delay before restarting a watcher (default: 1000)
 - `DiagnosticsUrlPrefix`: URL prefix for diagnostics endpoint (default: "<http://localhost:5005/>")
 - `DiagnosticsBearerToken`: Optional bearer token required to access diagnostics endpoints. If
-  omitted the service will generate a secure random token on first run and persist it in the  
-  configuration file.  
+  null or empty, diagnostics endpoints are accessible without authentication. No token is generated automatically.
 - `ChannelCapacity`: Internal channel capacity for pending file events (default: 1000)
 - `MaxParallelSends`: Number of concurrent HTTP senders (default: 4)
 - `FileWatcherInternalBufferSize`: FileSystemWatcher buffer size in bytes (default: 65536)
@@ -487,22 +486,21 @@ GET /events
 
 Security and accessing diagnostics  
   
-When `DiagnosticsBearerToken` is set (or auto-generated when omitted), all diagnostics endpoints  
-require a matching Authorization header with a bearer token. Example using curl:
+By default, diagnostics endpoints are **unauthenticated** and accessible without credentials. To secure them, set `DiagnosticsBearerToken` in your configuration:
 
-```bash
-curl -H "Authorization: Bearer <token>" http://localhost:5005/status
+```json
+{
+  "DiagnosticsBearerToken": "your-secret-token-here"
+}
 ```
 
-If you do not explicitly set `DiagnosticsBearerToken` in your configuration file, the service will  
-generate a random token on first run and persist it in the configuration file so you can use it to  
-access diagnostics. Treat this token like any other secret — rotate it if you believe it has been  
-exposed.  
+When a token is configured, all diagnostics endpoints require a matching Authorization header:
 
-Note: when a diagnostics token is auto-generated (either when creating the default configuration or  
-when adding the missing token to an existing configuration), the service logs the token once at  
-startup so operators can find it. The token is then persisted to the configuration file and  
-encrypted on Windows.  
+```bash
+curl -H "Authorization: Bearer your-secret-token-here" http://localhost:5005/status
+```
+
+**Note**: If you configure a token, it will be automatically encrypted using Windows machine-specific encryption when the configuration is saved, just like API bearer tokens.
 
 Logging  
   

@@ -1,12 +1,4 @@
-﻿using System.IO;
-using FileWatchRest.Configuration;
-using FileWatchRest.Services;
-using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
-using Xunit;
-
-namespace FileWatchRest.Tests.Configuration;
+﻿namespace FileWatchRest.Tests.Configuration;
 
 public class OverrideNullEmptySemanticsTests {
     private static readonly string[] GlobalArray = [".global1", ".global2"];
@@ -27,8 +19,8 @@ public class OverrideNullEmptySemanticsTests {
     }
 
     private static ExternalConfiguration MergeFor(Worker w, string folder, string fileName) {
-        System.Reflection.MethodInfo mi = typeof(Worker).GetMethod("GetConfigForPath", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        ExternalConfiguration result = (ExternalConfiguration)mi.Invoke(w, new object[] { Path.Combine(folder, fileName) })!;
+        MethodInfo mi = typeof(Worker).GetMethod("GetConfigForPath", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var result = (ExternalConfiguration)mi.Invoke(w, [Path.Combine(folder, fileName)])!;
         return result;
     }
 
@@ -149,7 +141,8 @@ public class OverrideNullEmptySemanticsTests {
         merged.ExcludePatterns.Should().BeEmpty();
     }
 
-    [Fact]    public void ExcludePatterns_GlobalEmpty_ActionNull_UsesGlobalEmpty() {
+    [Fact]
+    public void ExcludePatterns_GlobalEmpty_ActionNull_UsesGlobalEmpty() {
         string folder = Path.Combine(Path.GetTempPath(), "nullsem_7b");
         var cfg = new ExternalConfiguration {
             ExcludePatterns = EmptyArray,
@@ -161,7 +154,8 @@ public class OverrideNullEmptySemanticsTests {
         merged.ExcludePatterns.Should().BeEmpty("action null should fall back to global empty array");
     }
 
-    [Fact]    public void ApiEndpoint_GlobalSet_ActionNull_UsesGlobal() {
+    [Fact]
+    public void ApiEndpoint_GlobalSet_ActionNull_UsesGlobal() {
         string folder = Path.Combine(Path.GetTempPath(), "nullsem_6");
         var cfg = new ExternalConfiguration {
             ApiEndpoint = "https://global/",
