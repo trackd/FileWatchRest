@@ -184,26 +184,18 @@ public class DiagnosticsService : IDiagnosticsService {
                 response.Close();
                 return;
             }
-
-            string path = request.Url?.AbsolutePath ?? "/";
-
-            // Allow unauthenticated access to the /config endpoint for diagnostics (tests and safe read-only scenarios)
-            string pathLower = path.ToLowerInvariant();
-            if (!pathLower.Equals("/config", StringComparison.OrdinalIgnoreCase)) {
-                // If a bearer token is configured (not null/empty), require it for all other endpoints
-                if (_requiredBearerToken is not null) {
-                    string? auth = request.Headers?["Authorization"];
-                    if (string.IsNullOrWhiteSpace(_requiredBearerToken)) {
-                        // If token is empty string, treat as no auth required
-                    }
-                    else if (string.IsNullOrWhiteSpace(auth) || !auth.Equals("Bearer " + _requiredBearerToken, StringComparison.Ordinal)) {
-                        response.StatusCode = 401;
-                        response.Close();
-                        return;
-                    }
+            // Authorization: allow unauthenticated access unless a non-empty diagnostics bearer token is configured.
+            // When a token is configured (non-null/non-whitespace), require Authorization: Bearer <token> for all endpoints.
+            if (!string.IsNullOrWhiteSpace(_requiredBearerToken)) {
+                string? auth = request.Headers?["Authorization"];
+                if (string.IsNullOrWhiteSpace(auth) || !auth.Equals("Bearer " + _requiredBearerToken, StringComparison.Ordinal)) {
+                    response.StatusCode = 401;
+                    response.Close();
+                    return;
                 }
             }
 
+            string path = request.Url?.AbsolutePath ?? "/";
             string responseText;
             string contentType = "application/json";
 
@@ -242,10 +234,18 @@ public class DiagnosticsService : IDiagnosticsService {
                             ProcessedFolder = config.ProcessedFolder,
                             MoveProcessedFiles = config.MoveProcessedFiles,
                             AllowedExtensions = config.AllowedExtensions ?? [],
+                            ExcludePatterns = config.ExcludePatterns ?? [],
                             IncludeSubdirectories = config.IncludeSubdirectories,
                             DebounceMilliseconds = config.DebounceMilliseconds,
                             Retries = config.Retries,
                             RetryDelayMilliseconds = config.RetryDelayMilliseconds,
+                            WaitForFileReadyMilliseconds = config.WaitForFileReadyMilliseconds,
+                            DiscardZeroByteFiles = config.DiscardZeroByteFiles,
+                            MaxContentBytes = config.MaxContentBytes,
+                            StreamingThresholdBytes = config.StreamingThresholdBytes,
+                            EnableCircuitBreaker = config.EnableCircuitBreaker,
+                            CircuitBreakerFailureThreshold = config.CircuitBreakerFailureThreshold,
+                            CircuitBreakerOpenDurationMilliseconds = config.CircuitBreakerOpenDurationMilliseconds,
                             DiagnosticsUrlPrefix = config.DiagnosticsUrlPrefix,
                             ChannelCapacity = config.ChannelCapacity,
                             MaxParallelSends = config.MaxParallelSends,

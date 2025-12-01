@@ -125,7 +125,7 @@ $xml.Save($projectFile)
 
 Write-Host "✓ Updated $projectFile" -ForegroundColor Green
 
-# Optionally commit the change
+# Handle git operations based on context
 if ($Commit -or $Amend) {
     git add $projectFile
     if ($Amend) {
@@ -138,5 +138,13 @@ if ($Commit -or $Amend) {
     }
 }
 else {
-    Write-Host "Run with -Commit to create new commit or -Amend to amend existing commit" -ForegroundColor Cyan
+    # When run from pre-commit hook, auto-stage the file
+    $gitStatus = git status --porcelain $projectFile 2>$null
+    if ($gitStatus) {
+        git add $projectFile
+        Write-Host "✓ Staged version bump for commit" -ForegroundColor Green
+    }
+    else {
+        Write-Host "Run with -Commit to create new commit or -Amend to amend existing commit" -ForegroundColor Cyan
+    }
 }
