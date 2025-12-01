@@ -276,13 +276,13 @@ public class ExternalConfigurationOptionsMonitorTests : IDisposable {
         await WriteAllTextWithRetriesAsync(configPath, updatedJson);
 
         // Wait for listeners with timeout
-        async Task<bool> WaitForAllAsync(IEnumerable<Task> tasks, int timeoutMs = 2000) {
+        static async Task<bool> WaitForAllAsync(IEnumerable<Task> tasks, int timeoutMs = 2000) {
             var all = Task.WhenAll(tasks);
-            var finished = await Task.WhenAny(all, Task.Delay(timeoutMs));
+            Task finished = await Task.WhenAny(all, Task.Delay(timeoutMs));
             return finished == all;
         }
 
-        bool allCalled = await WaitForAllAsync(new[] { tcs1.Task, tcs2.Task, tcs3.Task }, 2000);
+        bool allCalled = await WaitForAllAsync([tcs1.Task, tcs2.Task, tcs3.Task], 2000);
         Assert.True(allCalled, "All listeners should be invoked within timeout");
 
         // Act - Dispose one listener and make another change
@@ -307,7 +307,7 @@ public class ExternalConfigurationOptionsMonitorTests : IDisposable {
         await WriteAllTextWithRetriesAsync(configPath, secondUpdateJson);
 
         // Wait for the two expected listeners
-        bool twoCalled = await WaitForAllAsync(new[] { tcs1.Task, tcs2.Task }, 2000);
+        bool twoCalled = await WaitForAllAsync([tcs1.Task, tcs2.Task], 2000);
         Assert.True(twoCalled, "Two remaining listeners should be invoked after disposal");
         // Ensure disposed listener did not fire (it would have completed tcs3)
         Assert.False(tcs3.Task.IsCompleted, "Disposed listener should not be invoked");

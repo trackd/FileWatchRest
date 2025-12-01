@@ -1,12 +1,4 @@
-﻿using System.IO;
-using FileWatchRest.Configuration;
-using FileWatchRest.Services;
-using FluentAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
-using Xunit;
-
-namespace FileWatchRest.Tests.Configuration;
+﻿namespace FileWatchRest.Tests.Configuration;
 
 public class OverridesAllSettingsTests {
     private static Worker CreateWorker(ExternalConfiguration cfg) {
@@ -23,8 +15,8 @@ public class OverridesAllSettingsTests {
     }
 
     private static ExternalConfiguration MergeFor(Worker w, string folder, string fileName) {
-        System.Reflection.MethodInfo mi = typeof(Worker).GetMethod("GetConfigForPath", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        ExternalConfiguration result = (ExternalConfiguration)mi.Invoke(w, new object[] { Path.Combine(folder, fileName) })!;
+        MethodInfo mi = typeof(Worker).GetMethod("GetConfigForPath", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var result = (ExternalConfiguration)mi.Invoke(w, [Path.Combine(folder, fileName)])!;
         return result;
     }
 
@@ -218,8 +210,8 @@ public class OverridesAllSettingsTests {
             Folders = { new ExternalConfiguration.WatchedFolderConfig { FolderPath = folder, ActionName = "rest" } },
             Actions = { new ExternalConfiguration.ActionConfig { Name = "rest", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "https://e/", CircuitBreakerFailureThreshold = 7 } }
         };
-        var w = CreateWorker(cfg);
-        var merged = MergeFor(w, folder, "a.txt");
+        Worker w = CreateWorker(cfg);
+        ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
         merged.CircuitBreakerFailureThreshold.Should().Be(7);
     }
 
@@ -231,8 +223,8 @@ public class OverridesAllSettingsTests {
             Folders = { new ExternalConfiguration.WatchedFolderConfig { FolderPath = folder, ActionName = "rest" } },
             Actions = { new ExternalConfiguration.ActionConfig { Name = "rest", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "https://e/", CircuitBreakerOpenDurationMilliseconds = 777 } }
         };
-        var w = CreateWorker(cfg);
-        var merged = MergeFor(w, folder, "a.txt");
+        Worker w = CreateWorker(cfg);
+        ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
         merged.CircuitBreakerOpenDurationMilliseconds.Should().Be(777);
     }
 }
