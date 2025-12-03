@@ -1,5 +1,16 @@
-﻿FileWatchRest  
-  
+﻿<h1 align="center">FileWatchRest</h1>  
+<div align="center">  
+   <sub>  
+
+   FileWatch Windows Service that can take actions on files.  
+   </sub>  
+<br/><br/>  
+
+[![build](https://github.com/trackd/FileWatchRest/actions/workflows/ci.yml/badge.svg)](https://github.com/trackd/FileWatchRest/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/github/trackd/FileWatchRest/graph/badge.svg?token=7H2MHCOP0G)](https://codecov.io/github/trackd/FileWatchRest)
+[![LICENSE](https://img.shields.io/github/license/trackd/FileWatchRest)](https://github.com/trackd/FileWatchRest/blob/main/LICENSE)
+</div>  
+
 Modern Windows service that watches folders for new or changed files and POSTs file information (and  
 optionally file contents) to a configured HTTP REST API  
 
@@ -304,7 +315,7 @@ Precedence and overrides:
 - `WatcherRestartDelayMilliseconds`: Delay before restarting a watcher (default: 1000)
 - `DiagnosticsUrlPrefix`: URL prefix for diagnostics endpoint (default: "<http://localhost:5005/>")
 - `DiagnosticsBearerToken`: Optional bearer token required to access diagnostics endpoints. If
-  null or empty, diagnostics endpoints are accessible without authentication. No token is generated automatically.
+  null or empty, diagnostics endpoints are accessible without authentication. No token is generated automatically.  
 - `ChannelCapacity`: Internal channel capacity for pending file events (default: 1000)
 - `MaxParallelSends`: Number of concurrent HTTP senders (default: 4)
 - `FileWatcherInternalBufferSize`: FileSystemWatcher buffer size in bytes (default: 65536)
@@ -500,7 +511,7 @@ When a token is configured, all diagnostics endpoints require a matching Authori
 curl -H "Authorization: Bearer your-secret-token-here" http://localhost:5005/status
 ```
 
-**Note**: If you configure a token, it will be automatically encrypted using Windows machine-specific encryption when the configuration is saved, just like API bearer tokens.
+**Note**: If you configure a token, it will be automatically encrypted using Windows machine-specific encryption when the configuration is saved, just like API bearer tokens.  
 
 Logging  
   
