@@ -1,0 +1,31 @@
+﻿{
+  "Folders": [
+    {
+      "FolderPath": "C:\\data\\outgoing",
+      "ActionName": "ParseAndTransform"
+    },
+    {
+      "FolderPath": "C:\\data\\incoming",
+      "ActionName": "ParseAndTransform"
+    }
+  ],
+  "Actions": [
+    {
+      "Name": "ParseAndTransform",
+      "ActionType": "PowerShellScript",
+      "ScriptPath": "C:\\scripts\\processObject.ps1",
+      "Arguments": [
+        "{FileNotification:json}"
+      ],
+      "IncludeSubdirectories": true,
+      "AllowedExtensions": [
+        ".json",
+        ".xml"
+      ],
+      "Retries": 5
+    }
+  ],
+  "MoveProcessedFiles": true,
+  "ProcessedFolder": "processed_ps",
+  "DebounceMilliseconds": 1500
+}

@@ -1,0 +1,39 @@
+﻿{
+  "Folders": [
+    {
+      "FolderPath": "C:\\apps\\drop",
+      "ActionName": "RunExe"
+    },
+    {
+      "FolderPath": "C:\\invoices",
+      "ActionName": "PostInvoices"
+    }
+  ],
+  "Actions": [
+    {
+      "Name": "RunExe",
+      "ActionType": "Executable",
+      "ExecutablePath": "C:\\tools\\processor.exe",
+      "Arguments": [
+        "--input",
+        "{FilePath}"
+      ],
+      "MoveProcessedFiles": true,
+      "ProcessedFolder": "processed_exe"
+    },
+    {
+      "Name": "PostInvoices",
+      "ActionType": "RestPost",
+      "ApiEndpoint": "https://invoices.example.com/upload",
+      "BearerToken": "<encrypted-or-plain-token>",
+      "PostFileContents": true,
+      "AllowedExtensions": [
+        ".pdf",
+        ".docx"
+      ],
+      "Retries": 5
+    }
+  ],
+  "DebounceMilliseconds": 1000,
+  "MaxParallelSends": 4
+}

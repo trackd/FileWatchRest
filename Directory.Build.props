@@ -1,0 +1,35 @@
+﻿<Project>
+  <PropertyGroup>
+    <!-- Modern C# / .NET 10 defaults -->
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Treat compiler warnings as errors to enforce high quality in CI -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- Enable Roslyn analyzers and trimming analysis for NativeAOT readiness -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <TrimMode>link</TrimMode>
+
+    <!-- Use the latest analysis level available in the SDK/analyzers -->
+    <AnalysisLevel>latest</AnalysisLevel>
+  </PropertyGroup>
+
+  <!--
+    Apply Native AOT-oriented publish defaults only when publishing (PublishAot=true).
+    Avoid setting SelfContained/PublishSingleFile globally for all Release builds
+    because it breaks projects that are only built (tests, libs) which don't
+    specify a runtime identifier. These defaults will be applied when an explicit
+    publish is performed (or when /p:PublishAot=true is set).
+  -->
+  <PropertyGroup Condition="'$(PublishAot)' == 'true' and '$(Configuration)' == 'Release'">
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>link</TrimMode>
+  </PropertyGroup>
+
+  <!-- PackageReferences removed here to avoid duplicate-restore issues; prefer per-project references
+      or pin versions in the root csproj. -->
+</Project>

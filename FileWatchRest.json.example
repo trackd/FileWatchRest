@@ -1,7 +1,49 @@
 ﻿{
   "Folders": [
-    "C:\\temp\\watch",
-    "C:\\data\\incoming"
+    {
+      "FolderPath": "C:\\temp\\watch",
+      "ActionName": "RestEndpoint1"
+    },
+    {
+      "FolderPath": "C:\\data\\incoming",
+      "ActionName": "ObjectScript"
+    },
+    {
+      "FolderPath": "C:\\data\\outgoing",
+      "ActionName": "ProcessScript"
+    }
+  ],
+  "Actions": [
+    {
+      "Name": "ProcessScript",
+      "ActionType": "PowerShellScript",
+      "ScriptPath": "C:\\scripts\\process.ps1",
+      "Arguments": ["-Path","{FilePath}"],
+      "IncludeSubdirectories": false,
+      "MoveProcessedFiles": false,
+      "AllowedExtensions": [".txt", ".log"],
+      "ProcessedFolder": "script_processed"
+    },
+    {
+      "Name": "ObjectScript",
+      "ActionType": "PowerShellScript",
+      "ScriptPath": "C:\\scripts\\processObject.ps1",
+      "Arguments": ["{FileNotification:json}"],
+      "IncludeSubdirectories": true,
+      "AllowedExtensions": [".json", ".xml"],
+      "Retries": 5
+    },
+    {
+      "Name": "RestEndpoint1",
+      "ActionType": "RestPost",
+      "ApiEndpoint": "https://api.example.com/files",
+      "BearerToken": "your-bearer-token-here-will-be-encrypted-automatically",
+      "PostFileContents": true,
+      "MoveProcessedFiles": true,
+      "AllowedExtensions": [".pdf", ".docx"],
+      "MaxContentBytes": 10485760,
+      "Retries": 5
+    }
   ],
   "ApiEndpoint": "https://api.example.com/files",
   "BearerToken": "your-bearer-token-here-will-be-encrypted-automatically",
@@ -11,8 +53,7 @@
   "AllowedExtensions": [
     ".txt",
     ".json",
-    ".xml",
-    ".csv"
+    ".xml"
   ],
   "ExcludePatterns": [
     "Backup_*",
@@ -26,7 +67,7 @@
   "WatcherMaxRestartAttempts": 3,
   "WatcherRestartDelayMilliseconds": 1000,
   "DiagnosticsUrlPrefix": "http://localhost:5005/",
-  "DiagnosticsBearerToken": "your-diagnostics-bearer-token-or-omit-to-auto-generate",
+  "DiagnosticsBearerToken": null,
   "ChannelCapacity": 1000,
   "MaxParallelSends": 4,
   "FileWatcherInternalBufferSize": 65536,
@@ -41,6 +82,6 @@
     "LogType": "Csv",
     "FilePathPattern": "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}",
     "LogLevel": "Information",
-    "RetainedFileCountLimit": 14
+    "RetainedDays": 14
   }
 }

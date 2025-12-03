@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 <#
 Package the app for deployment on target machine and produce output folder with helper installer script
 Usage:
@@ -9,100 +10,113 @@ Parameters:
 #>
 param(
     [string]$ProjectPath = 'FileWatchRest',
-    [string]$OutputDir = '.\output'
+    [string]$OutputDir = '.\output',
+    [string]$Configuration = 'Release',
+    [switch]$VersionBump,
+    [string]$Version,
+    [string]$AssemblyVersion,
+    [string]$FileVersion,
+    [string]$InformationalVersion,
+    [switch]$SkipTests,
+    [switch]$SkipPublish,
+    [switch]$CollectCoverage
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$configuration = 'Release'
+# Optional version bump before building
+if ($VersionBump -and -not $Version) {
+    $bumpScript = Join-Path $PSScriptRoot "bump-version.ps1"
+    if (Test-Path $bumpScript) {
+        Write-Host "Running version bump..." -ForegroundColor Gray
+        $version = & $bumpScript #-NoUpdate
+    }
+    else { Write-Warning "bump-version.ps1 not found at: $bumpScript" }
+}
+
+# Default CollectCoverage to true when running in CI unless explicitly provided
+if (-not $PSBoundParameters.ContainsKey('CollectCoverage') -and $env:CI) { $CollectCoverage = $true }
+$Parent = Split-Path $PSScriptRoot -Parent
+
+$solution = 'FileWatchRest.sln'
+$project = Join-Path $Parent $ProjectPath 'FileWatchRest.csproj'
 $rid = 'win-x64'
 
-$publishDir = Join-Path -Path $ProjectPath -ChildPath "bin\$configuration\net10.0\$rid\publish"
+Write-Host "==> Restoring dependencies..." -ForegroundColor Cyan
+& dotnet restore $solution
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# publish
-$publishFlags = @('-c', $configuration, '-r', $rid)
-$msbuildProps = @{
-    PublishSingleFile = $true
-    SelfContained     = $true
-    PublishAot        = $true
-    PublishTrimmed    = $true
-    TrimMode          = 'link'
-}
-foreach ($k in $msbuildProps.Keys) {
-    $publishFlags += "-p:$k=$($msbuildProps[$k])"
-}
-Write-Host "Publishing to $publishDir"
-& dotnet publish $ProjectPath @publishFlags
-
-# determine actual publish folder (handle publishing from solution or project folder)
-if (-not (Test-Path $publishDir)) {
-    Write-Host "Expected publish folder '$publishDir' not found; searching for publish folder under $ProjectPath ..."
-    $found = Get-ChildItem -Path $ProjectPath -Directory -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'publish' } | Select-Object -First 1
-    if ($found) {
-        $publishDir = $found.FullName
-        Write-Host "Found publish folder: $publishDir"
-    } else {
-        Write-Error "Publish folder not found under $ProjectPath. Ensure dotnet publish succeeded and set -ProjectPath to the project folder if needed."
-        exit 1
-    }
-}
-
-# prepare output dir
-if (Test-Path $OutputDir) { Remove-Item -Recurse -Force $OutputDir }
-New-Item -ItemType Directory -Path $OutputDir | Out-Null
-
-# copy publish files
-Copy-Item -Path (Join-Path $publishDir '*') -Destination $OutputDir -Recurse -Force -Exclude '*.pdb'
-
-# create installer script for target machine
-# Use single-quoted here-string to avoid expanding variables inside the installer script
-$installer = @'
-# Target-machine installer script for FileWatchRest
-param(
-    [string] $ServiceName = 'FileWatchRest',
-    [string] $ServiceDisplayName = 'File Watch REST Service'
+Write-Host "==> Building solution..." -ForegroundColor Cyan
+$buildArgs = @(
+    'build',
+    $solution,
+    '--configuration',
+    $Configuration,
+    '--no-restore'
 )
+if ($Version) { $buildArgs += "/p:Version=$Version" }
+if ($AssemblyVersion) { $buildArgs += "/p:AssemblyVersion=$AssemblyVersion" }
+if ($FileVersion) { $buildArgs += "/p:FileVersion=$FileVersion" }
+if ($InformationalVersion) { $buildArgs += "/p:InformationalVersion=$InformationalVersion" }
+& dotnet @buildArgs
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-
-# prepare program files folder
-$installDir = Join-Path -Path $env:ProgramFiles -ChildPath $ServiceName
-if (-not (Test-Path $installDir)) { New-Item -ItemType Directory -Path $installDir | Out-Null }
-
-# copy files from package dir (this script is expected to be run from the package folder)
-Get-ChildItem -Path $PSScriptRoot -Exclude '*.ps1' | ForEach-Object {
-    Copy-Item -Path $_.FullName -Destination $installDir -Recurse -Force
+# Run tests (optionally collect coverage)
+if (-not $SkipTests) {
+    Write-Host "==> Running tests..." -ForegroundColor Cyan
+    $testArgs = @('test', $solution, '--configuration', $Configuration, '--no-build')
+    if ($CollectCoverage) {
+        Write-Host "Collecting code coverage..." -ForegroundColor Gray
+        $testArgs += '--collect:XPlat Code Coverage'
+        $testArgs += '--results-directory'
+        $testArgs += './coverage'
+    }
+    & dotnet @testArgs
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
-# create ProgramData log folder
-$logDir = Join-Path -Path $env:ProgramData -ChildPath $ServiceName
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+# Publish with Native AOT unless skipped
+if (-not $SkipPublish) {
+    Write-Host "==> Publishing with Native AOT..." -ForegroundColor Cyan
 
-# install service
-$exe = Get-ChildItem -Path $installDir -Filter '*.exe' | Select-Object -First 1
-if (-not $exe) { Write-Error 'No executable found in install dir'; exit 1 }
-$exePath = $exe.FullName
+    $publishDir = Join-Path -Path $ProjectPath -ChildPath "bin/$Configuration/net10.0/$rid/publish"
 
-# remove existing service if present
-$svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-if ($svc) {
-    try { Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue } catch {}
-    & sc.exe delete $ServiceName | Out-Null
-    Start-Sleep -Seconds 1
+    # Clean previous publish/output/artifacts
+    if (Test-Path $publishDir) { Remove-Item -Recurse -Force $publishDir }
+    foreach ($d in @((Join-Path (Get-Location) 'publish'), (Join-Path (Get-Location) 'output'), (Join-Path (Get-Location) 'artifacts'))) {
+        if (Test-Path $d) { Remove-Item -Recurse -Force $d }
+    }
+
+    # Ensure restore includes the target runtime so project.assets.json contains net10.0/$rid
+    Write-Host "Ensuring restore for runtime: $rid" -ForegroundColor Gray
+    & dotnet restore $project --runtime $rid
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'Runtime-specific restore failed; proceeding to publish may fail'; }
+
+    $publishArgs = @(
+        'publish', $project,
+        '--configuration', $Configuration,
+        '--runtime', $rid,
+        '--output', "./publish",
+        '-p:PublishAot=true',
+        '-p:PublishSingleFile=true',
+        '-p:SelfContained=true',
+        '-p:PublishTrimmed=true',
+        '-p:TrimMode=link'
+    )
+    if ($Version) { $publishArgs += "/p:Version=$Version" }
+    if ($AssemblyVersion) { $publishArgs += "/p:AssemblyVersion=$AssemblyVersion" }
+    if ($FileVersion) { $publishArgs += "/p:FileVersion=$FileVersion" }
+    if ($InformationalVersion) { $publishArgs += "/p:InformationalVersion=$InformationalVersion" }
+    & dotnet @publishArgs
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    Write-Host "Published to: ./publish" -ForegroundColor Green
+
+    # Prepare output dir (manual install bundle)
+    if (Test-Path $OutputDir) { Remove-Item -Recurse -Force $OutputDir }
+    New-Item -ItemType Directory -Path $OutputDir | Out-Null
+    Copy-Item -Path (Join-Path (Resolve-Path './publish').Path '*') -Destination $OutputDir -Recurse -Force -Exclude '*.pdb'
+
+    Write-Host "Package prepared in $OutputDir" -ForegroundColor Gray
 }
-
-# create service
-$binPathArg = 'binPath="' + $exePath + '"'
-& sc.exe create $ServiceName $binPathArg DisplayName= $ServiceDisplayName start= auto | Out-Null
-Start-Sleep -Milliseconds 500
-Start-Service -Name $ServiceName
-
-Write-Host "Service installed to $installDir and started. Logs will be under $logDir"
-'@
-
-$installerPath = Join-Path -Path $OutputDir -ChildPath 'install_on_target.ps1'
-Set-Content -Path $installerPath -Value $installer -Encoding UTF8
-
-Write-Host "Package prepared in $OutputDir (include this folder on target and run install_on_target.ps1 as admin)."

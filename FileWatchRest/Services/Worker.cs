@@ -1,105 +1,14 @@
-﻿using FileWatchRest.Configuration;
+
 namespace FileWatchRest.Services;
 
-public partial class Worker : BackgroundService
-{
-    private static readonly Action<ILogger<Worker>, int, Exception?> _loadedConfig =
-        LoggerMessage.Define<int>(LogLevel.Information, new EventId(1, "LoadedConfig"), "Loaded external configuration with {FolderCount} folders");
-    private static readonly Action<ILogger<Worker>, string, string, Exception?> _checkingPattern =
-        LoggerMessage.Define<string, string>(LogLevel.Debug, new EventId(103, "CheckingPattern"), "Checking file '{FileName}' against pattern '{Pattern}'");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _configFilePathLoaded =
-        LoggerMessage.Define<string>(LogLevel.Information, new EventId(104, "ConfigFilePathLoaded"), "Loaded configuration file: {ConfigPath}");
-    private static readonly Action<ILogger<Worker>, string, string, Exception?> _excludedByPattern =
-        LoggerMessage.Define<string, string>(LogLevel.Debug, new EventId(102, "ExcludedByPattern"), "File {FileName} excluded by pattern {Pattern}");
-    private static readonly Action<ILogger<Worker>, Exception?> _noFoldersConfigured =
-        LoggerMessage.Define(LogLevel.Warning, new EventId(2, "NoFoldersConfigured"), "No folders configured to watch. Update the configuration file in AppData.");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _watcherFailedStopping =
-        LoggerMessage.Define<string>(LogLevel.Error, new EventId(3, "WatcherFailedStopping"), "Watcher for {Folder} failed after max restart attempts, stopping service");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _queuedDebouncedTrace =
-        LoggerMessage.Define<string>(LogLevel.Trace, new EventId(4, "QueuedDebounced"), "Queued debounced enqueue for {Path}");
-    private static readonly Action<ILogger<Worker>, string, long?, bool, Exception?> _createdNotificationDebug =
-        LoggerMessage.Define<string, long?, bool>(LogLevel.Debug, new EventId(5, "CreatedNotification"), "Created notification for {Path}: FileSize={FileSize}, HasContent={HasContent}");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _failedSchedulingDebounce =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(6, "FailedSchedulingDebounce"), "Failed scheduling debounced enqueue for {Path}");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _errorProcessingFileWarning =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(7, "ErrorProcessingFile"), "Error processing file {Path}");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _apiEndpointNotConfigured =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(8, "ApiEndpointNotConfigured"), "ApiEndpoint not configured. Skipping file {Path}");
-    private static readonly Action<ILogger<Worker>, Exception?> _failedToProcessFile =
-        LoggerMessage.Define(LogLevel.Error, new EventId(9, "FailedToProcessFile"), "Failed to process file");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _ignoredFileInProcessed =
-        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(10, "IgnoredInProcessed"), "Ignoring file in processed folder: {Path}");
-    private static readonly Action<ILogger<Worker>, string, bool, bool, Exception?> _processingFileTrace =
-        LoggerMessage.Define<string, bool, bool>(LogLevel.Trace, new EventId(11, "ProcessingFile"), "Processing file {Path}, PostFileContents: {PostContents}, MoveAfterProcessing: {MoveFiles}");
-    private static readonly Action<ILogger<Worker>, string, long, Exception?> _fileExceedsMaxContentWarning =
-        LoggerMessage.Define<string, long>(LogLevel.Warning, new EventId(12, "FileExceedsMaxContent"), "File {Path} exceeds MaxContentBytes ({Limit} bytes); sending metadata only.");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _failedReadFileWarning =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(13, "FailedReadFile"), "Failed to read file contents for {Path}");
-    private static readonly Action<ILogger<Worker>, string, string, Exception?> _attachingAuthDebug =
-        LoggerMessage.Define<string, string>(LogLevel.Debug, new EventId(14, "AttachingAuth"), "Attaching Authorization header for endpoint {Endpoint}. Token preview: {TokenPreview}");
-    private static readonly Action<ILogger<Worker>, string, string, Exception?> _circuitOpenSkipWarning =
-        LoggerMessage.Define<string, string>(LogLevel.Warning, new EventId(15, "CircuitOpenSkip"), "Circuit breaker is open for endpoint {Endpoint}; skipping post for {Path}");
-    private static readonly Action<ILogger<Worker>, string, int, long, int, Exception?> _successPostedInfo =
-        LoggerMessage.Define<string, int, long, int>(LogLevel.Information, new EventId(16, "PostedSuccess"), "Successfully posted file {Path} with StatusCode {StatusCode} in {TotalMs}ms (attempts={Attempts})");
-    private static readonly Action<ILogger<Worker>, string, int, Exception?> _failedPostError =
-        LoggerMessage.Define<string, int>(LogLevel.Error, new EventId(17, "FailedPost"), "Failed to post file {Path} after {Attempts} attempts");
-    private static readonly Action<ILogger<Worker>, string, string, Exception?> _movedProcessedInfo =
-        LoggerMessage.Define<string, string>(LogLevel.Information, new EventId(18, "MovedProcessed"), "Moved processed file {From} to {To}");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _failedMoveWarning =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(19, "FailedMoveProcessed"), "Failed to move processed file {Path}");
-    private static readonly Action<ILogger<Worker>, Exception?> _configReloadError =
-        LoggerMessage.Define(LogLevel.Error, new EventId(20, "ConfigReloadFailed"), "Failed to reload configuration");
-    private static readonly Action<ILogger<Worker>, Exception?> _configChangedInfo =
-        LoggerMessage.Define(LogLevel.Information, new EventId(21, "ConfigChanged"), "Configuration changed, reloading watchers");
-    private static readonly Action<ILogger<Worker>, Exception?> _configReloadedInfo =
-        LoggerMessage.Define(LogLevel.Information, new EventId(22, "ConfigReloaded"), "Configuration reload completed");
-    private static readonly Action<ILogger<Worker>, LogLevel, Exception?> _loggingConfiguredInfo =
-        LoggerMessage.Define<LogLevel>(LogLevel.Information, new EventId(23, "LoggingConfigured"), "Logging level configured to {LogLevel}. Note: Restart service for log level changes to take full effect");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _invalidLogLevelWarning =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(24, "InvalidLogLevel"), "Invalid LogLevel '{LogLevel}' in configuration. Valid values: Trace, Debug, Information, Warning, Error, Critical, None");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _failedConfigureLoggingWarning =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(25, "FailedConfigureLogging"), "Failed to configure logging level from '{LogLevel}', using Information");
-    private static readonly Action<ILogger<Worker>, string, string, Exception?> _requestCorrelationDebug =
-        LoggerMessage.Define<string, string>(LogLevel.Debug, new EventId(34, "RequestCorrelation"), "Request {RequestId} for Path {Path}");
-    private static readonly Action<ILogger<Worker>, Exception?> _noFoldersScanDebug =
-        LoggerMessage.Define(LogLevel.Debug, new EventId(26, "NoFoldersScan"), "No folders configured - skipping existing-files scan");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _configuredFolderMissingWarning =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(27, "ConfiguredFolderMissing"), "Configured folder does not exist: {Folder}");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _failedQueueExistingFileWarning =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(28, "FailedQueueExistingFile"), "Failed to queue existing file {Path} - channel full");
-    private static readonly Action<ILogger<Worker>, int, string, Exception?> _enqueuedExistingFilesInfo =
-        LoggerMessage.Define<int, string>(LogLevel.Information, new EventId(29, "EnqueuedExistingFiles"), "Enqueued {Count} existing files from {Folder}");
-    private static readonly Action<ILogger<Worker>, int, string, Exception?> _completedEnqueueInfo =
-        LoggerMessage.Define<int, string>(LogLevel.Information, new EventId(30, "CompletedEnqueue"), "Completed enqueueing {Count} existing files from {Folder}");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _failedScanningFolderWarning =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(31, "FailedScanningFolder"), "Failed scanning folder {Folder} for existing files");
-    private static readonly Action<ILogger<Worker>, Exception?> _unexpectedErrorScanningFoldersWarning =
-        LoggerMessage.Define(LogLevel.Warning, new EventId(32, "UnexpectedErrorScanningFolders"), "Unexpected error scanning folders for existing files");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _watcherErrorWarning =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(33, "WatcherErrorWorker"), "FileSystemWatcher error for folder {Folder}");
-    private static readonly Action<ILogger<Worker>, string, int, Exception?> _waitingForFileReady =
-        LoggerMessage.Define<string, int>(LogLevel.Debug, new EventId(35, "WaitingForFileReady"), "Waiting for file {Path} (up to {WaitMs}ms) to become ready and non-empty");
-    private static readonly Action<ILogger<Worker>, string, int, Exception?> _fileStillEmptyWarning =
-        LoggerMessage.Define<string, int>(LogLevel.Warning, new EventId(36, "FileStillEmpty"), "File {Path} remained empty after waiting {WaitMs}ms");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _skippingZeroLengthFile =
-        LoggerMessage.Define<string>(LogLevel.Information, new EventId(37, "SkippingZeroLengthFile"), "Skipping zero-length file {Path} after waiting for content");
-    private static readonly Action<ILogger<Worker>, string, int, string, Exception?> _httpErrorResponse =
-        LoggerMessage.Define<string, int, string>(LogLevel.Warning, new EventId(38, "HttpErrorResponse"), "HTTP error for {Path}: {StatusCode} {ReasonPhrase}");
-    private static readonly Action<ILogger<Worker>, string, int, Exception?> _retryingRequest =
-        LoggerMessage.Define<string, int>(LogLevel.Debug, new EventId(39, "RetryingRequest"), "Retrying request for {Path}, attempt {Attempt}");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _httpRequestException =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(40, "HttpRequestException"), "Network error posting {Path}");
-    private static readonly Action<ILogger<Worker>, string, Exception?> _httpTimeoutException =
-        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(41, "HttpTimeoutException"), "Request timeout posting {Path}");
+public partial class Worker : BackgroundService {
+    private static readonly ActivitySource ActivitySource = new("FileWatchRest.Worker", "1.0.0");
 
     private readonly ILogger<Worker> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ConfigurationService _configService;
+
     private readonly FileWatcherManager _fileWatcherManager;
-    private readonly ConcurrentDictionary<string, DateTime> _pending = new(StringComparer.OrdinalIgnoreCase);
-    private Task? _debounceSchedulerTask;
-    private Channel<string>? _sendChannel;
-    private List<Task>? _senderTasks;
+    private readonly FileDebounceService _debounceService;
     private readonly IHostApplicationLifetime _lifetime;
     private readonly DiagnosticsService _diagnostics;
     private readonly SemaphoreSlim _configReloadLock = new(1, 1);
@@ -107,88 +16,79 @@ public partial class Worker : BackgroundService
     private readonly IOptionsMonitor<ExternalConfiguration> _optionsMonitor;
     private IDisposable? _optionsSubscription;
 
-    // Expose current configuration for tests and controlled updates
-    internal ExternalConfiguration CurrentConfig { get => _currentConfig; set => _currentConfig = value; }
-
-    private ExternalConfiguration _currentConfig = new();
-    private LogLevel _configuredLogLevel = LogLevel.Information;
-
+    /// <summary>
+    /// Expose current configuration for tests and controlled updates
+    /// </summary>
+    internal ExternalConfiguration CurrentConfig { get; set; }
     public Worker(
         ILogger<Worker> logger,
         IHttpClientFactory httpClientFactory,
         IHostApplicationLifetime lifetime,
         DiagnosticsService diagnostics,
-        ConfigurationService configService,
         FileWatcherManager fileWatcherManager,
+        FileDebounceService debounceService,
         IResilienceService resilienceService,
-        IOptionsMonitor<ExternalConfiguration> optionsMonitor)
-    {
+        IOptionsMonitor<ExternalConfiguration> optionsMonitor) {
         _logger = logger;
         _httpClientFactory = httpClientFactory;
         _lifetime = lifetime;
         _diagnostics = diagnostics;
-        _configService = configService;
+
         _fileWatcherManager = fileWatcherManager;
+        _debounceService = debounceService;
         _resilienceService = resilienceService;
         _optionsMonitor = optionsMonitor;
+        // Initialize _currentConfig from options monitor
+        CurrentConfig = _optionsMonitor.CurrentValue ?? new ExternalConfiguration();
+        // Subscribe to configuration changes
+        // Sync handler for tests: propagate changes via OnConfigurationChanged only
+        _optionsMonitor.OnChange(config => {
+            CurrentConfig = config ?? new ExternalConfiguration();
+            OnConfigurationChanged(CurrentConfig).GetAwaiter().GetResult();
+        });
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        // Load external configuration
 
-        // Log the config file path being loaded (if available)
-        if (_configService is null)
-            throw new InvalidOperationException("ConfigurationService is not initialized.");
 
-        if (!string.IsNullOrWhiteSpace(_configService.ConfigFilePath))
-        {
-            _configFilePathLoaded(_logger, _configService.ConfigFilePath, null);
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+        // Configuration is provided via IOptionsMonitor; current value already initialized.
+        ConfigureLogging(CurrentConfig.Logging?.LogLevel.ToString() ?? "Information");
+        LoggerDelegates.LoadedConfig(_logger, CurrentConfig.Folders.Count, null);
+
+        // Configure folder actions from Folders list
+        try {
+            _fileWatcherManager.ConfigureFolderActions(CurrentConfig.Folders, CurrentConfig, this);
         }
-        _currentConfig = await _configService.LoadConfigurationAsync(stoppingToken);
-
-        // Apply logging configuration
-        ConfigureLogging(_currentConfig.Logging?.LogLevel);
-
-        _loadedConfig(_logger, _currentConfig.Folders.Length, null);
+        catch (Exception ex) {
+            LoggerDelegates.FailedConfigReload(_logger, ex);
+        }
 
         // Configure diagnostics access token and start HTTP server
-        _diagnostics.SetBearerToken(_currentConfig.DiagnosticsBearerToken);
-        _diagnostics.StartHttpServer(_currentConfig.DiagnosticsUrlPrefix);
+        _diagnostics.SetBearerToken(CurrentConfig.DiagnosticsBearerToken);
+        _diagnostics.SetConfiguration(CurrentConfig);
+        _diagnostics.StartHttpServer(CurrentConfig.DiagnosticsUrlPrefix);
 
         // Start watching for configuration changes via options monitor (monitor registers the file watcher)
         _optionsSubscription = _optionsMonitor.OnChange(async (newCfg, name) => await OnConfigurationChanged(newCfg));
 
-        if (_currentConfig.Folders.Length == 0)
-        {
-            _noFoldersConfigured(_logger, null);
+        if (CurrentConfig.Folders.Count == 0) {
+            LoggerDelegates.NoFoldersConfigured(_logger, null);
             await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
             return;
         }
 
-        await StartWatchingFoldersAsync(_currentConfig.Folders);
+        await StartWatchingFoldersAsync(CurrentConfig.Folders);
 
-        // Initialize send channel and sender tasks
-        _sendChannel = Channel.CreateBounded<string>(_currentConfig.ChannelCapacity);
-        _senderTasks = new List<Task>();
-        for (int i = 0; i < Math.Max(1, _currentConfig.MaxParallelSends); i++)
-        {
-            _senderTasks.Add(Task.Run(() => SenderLoopAsync(_sendChannel.Reader, stoppingToken), stoppingToken));
-        }
-
-        // Start centralized debounce scheduler
-        _debounceSchedulerTask = Task.Run(() => DebounceSchedulerLoop(stoppingToken), stoppingToken);
+        // Background services (FileDebounceService, FileSenderService) handle debouncing and sending
+        // Worker now only coordinates file watching and event routing
 
         // Enqueue existing files that were added while service was down
         await EnqueueExistingFilesAsync(stoppingToken);
 
-        // Block until cancellation; debounced enqueue tasks will drive processing
-        try
-        {
+        try {
             await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
             // Exit gracefully on shutdown
         }
 
@@ -196,224 +96,187 @@ public partial class Worker : BackgroundService
         await CleanupAsync();
     }
 
-    private Task StartWatchingFoldersAsync(string[] folders)
-    {
-        return _fileWatcherManager.StartWatchingAsync(folders, _currentConfig, OnFileChanged, OnWatcherError, folder =>
-        {
+    private Task StartWatchingFoldersAsync(List<ExternalConfiguration.WatchedFolderConfig> folders) {
+        return _fileWatcherManager.StartWatchingAsync(folders, CurrentConfig, OnFileChanged, OnWatcherError, folderPath => {
             // Exceeded restart attempts -> stop application
-            _watcherFailedStopping(_logger, folder, null);
+            LoggerDelegates.WatcherFailedStopping(_logger, folderPath, null);
             _lifetime.StopApplication();
         });
     }
 
-    private void OnFileChanged(object? sender, FileSystemEventArgs e)
-    {
+    private void OnFileChanged(object? sender, FileSystemEventArgs e) {
         // Accept Created, Changed, and Renamed events
         // Renamed events occur when files are moved into the watched folder
-        if (e.ChangeType is not (WatcherChangeTypes.Created or WatcherChangeTypes.Changed or WatcherChangeTypes.Renamed))
-            return;        string path = e.FullPath;
-        string? oldPath = null;
-        if (e is RenamedEventArgs renamed)
-        {
-            oldPath = renamed.OldFullPath;
-            _logger.LogDebug("File renamed: {OldPath} -> {NewPath}", oldPath, path);
+        if (e.ChangeType is not (WatcherChangeTypes.Created or WatcherChangeTypes.Changed or WatcherChangeTypes.Renamed)) {
+            return;
         }
 
+        string path = e.FullPath;
+        string? oldPath = null;
+        if (e is RenamedEventArgs renamed) {
+            oldPath = renamed.OldFullPath;
+            LoggerDelegates.FileRenamed(_logger, oldPath ?? string.Empty, path, null);
+        }
+
+        // Determine effective config for this path (merge action with global defaults)
+        ExternalConfiguration cfg = GetConfigForPath(path);
+
         // Exclude files in the processed folder to prevent infinite loops
-        var pathParts = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (pathParts.Any(part => part.Equals(_currentConfig.ProcessedFolder, StringComparison.OrdinalIgnoreCase)))
-        {
-            _ignoredFileInProcessed(_logger, path, null);
+        string[] pathParts = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (pathParts.Any(part => part.Equals(cfg.ProcessedFolder, StringComparison.OrdinalIgnoreCase))) {
+            LoggerDelegates.IgnoredFileInProcessed(_logger, path, null);
             return;
         }
 
         // Apply file extension filtering
-        if (_currentConfig.AllowedExtensions.Length > 0)
-        {
-            var extension = Path.GetExtension(path);
-            if (!_currentConfig.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
-            {
+        if (cfg.AllowedExtensions is { Length: > 0 }) {
+            string extension = Path.GetExtension(path);
+            if (!cfg.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) {
                 return;
             }
         }
 
         // Apply exclude pattern filtering
-        if (_currentConfig.ExcludePatterns.Length > 0)
-        {
-            var fileName = Path.GetFileName(path);
+        if (cfg.ExcludePatterns is { Length: > 0 }) {
+            string fileName = Path.GetFileName(path);
 
-            _logger.LogTrace("Checking file '{FileName}' against {Count} exclude patterns", fileName, _currentConfig.ExcludePatterns.Length);
+            LoggerDelegates.CheckingExcludePatterns(_logger, fileName, cfg.ExcludePatterns.Length, null);
 
-            // Use optimized pattern matcher with caching (single pass)
-            var matchedPattern = WildcardPatternCache.TryMatchAny(fileName, _currentConfig.ExcludePatterns);
-            if (matchedPattern is not null)
-            {
-                _logger.LogDebug("File {FileName} excluded by pattern {Pattern}", fileName, matchedPattern);
+            // Use framework-based pattern matcher (System.IO.Enumeration.FileSystemName)
+            string? matchedPattern = FileSystemPatternMatcher.TryMatchAny(fileName, cfg.ExcludePatterns);
+            if (matchedPattern is not null) {
+                LoggerDelegates.ExcludedByPattern(_logger, fileName, matchedPattern, null);
                 return;
             }
 
-            _logger.LogDebug("File '{FileName}' was NOT excluded by any pattern. Patterns checked: {Patterns}",
-                fileName, string.Join(", ", _currentConfig.ExcludePatterns));
-        }
-
-        // Schedule debounced enqueue for this path
-        ScheduleEnqueueAfterDebounce(path, _currentConfig.DebounceMilliseconds);
-
-        _queuedDebouncedTrace(_logger, path, null);
-
-        // Fast-path for zero debounce - short-circuit scheduling and try to write immediately
-        if (_currentConfig.DebounceMilliseconds <= 0 && _sendChannel is not null)
-        {
-            _sendChannel.Writer.TryWrite(path);
-        }
-    }
-
-    private void ScheduleEnqueueAfterDebounce(string path, int debounceMs)
-    {
-        // Update pending timestamp for this path (UTC to avoid timezone issues)
-        _pending.AddOrUpdate(path, DateTime.UtcNow, (_, __) => DateTime.UtcNow);
-        return;
-    }
-
-    private async Task DebounceSchedulerLoop(CancellationToken ct)
-    {
-        try
-        {
-            while (!ct.IsCancellationRequested)
-            {
-                try
-                {
-                    if (_pending.IsEmpty)
-                    {
-                        await Task.Delay(100, ct);
-                        continue;
-                    }
-
-                    var now = DateTime.Now;
-                    var due = new List<string>();
-                    foreach (var kv in _pending)
-                    {
-                        if ((now - kv.Value).TotalMilliseconds >= _currentConfig.DebounceMilliseconds)
-                        {
-                            if (_pending.TryRemove(kv.Key, out _)) due.Add(kv.Key);
-                        }
-                    }
-
-                    if (due.Count > 0 && _sendChannel is not null)
-                    {
-                        foreach (var p in due)
-                        {
-                            // Backpressure policy: try immediate write, otherwise attempt to write with short timeout
-                            if (!_sendChannel.Writer.TryWrite(p))
-                            {
-                                var writeTask = _sendChannel.Writer.WriteAsync(p, ct).AsTask();
-                                var completed = await Task.WhenAny(writeTask, Task.Delay(1000, ct));
-                                if (completed != writeTask)
-                                {
-                                    // Timed out; drop and log
-                                    _failedQueueExistingFileWarning(_logger, p, null);
-                                }
-                            }
-                        }
-                    }
-
-                    await Task.Delay(100, ct);
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
-                catch (Exception ex)
-                {
-                    _failedSchedulingDebounce(_logger, "<scheduler>", ex);
-                    await Task.Delay(1000, ct);
-                }
+            if (_logger.IsEnabled(LogLevel.Debug)) {
+                LoggerDelegates.NotExcludedPatterns(_logger, fileName, string.Join(", ", cfg.ExcludePatterns), null);
             }
         }
-        catch { /* swallow */ }
+
+        // Exclude files that have already been posted
+        if (_diagnostics.IsFilePosted(path)) {
+            LoggerDelegates.SkippingAlreadyPosted(_logger, path, null);
+            return;
+        }
+
+        // Schedule debounced processing via FileDebounceService
+        _debounceService.Schedule(path);
+
+        LoggerDelegates.QueuedDebouncedTrace(_logger, path, null);
     }
 
-    private async Task SenderLoopAsync(ChannelReader<string> reader, CancellationToken ct)
-    {
-        await foreach (var path in reader.ReadAllAsync(ct))
-        {
-            try
-            {
-                if (_currentConfig.WaitForFileReadyMilliseconds > 0)
-                {
-                    var ready = await WaitForFileReadyAsync(path, ct);
-                    if (!ready)
-                    {
-                        // Configured to discard zero-length files and file remained empty - skip processing
-                        _diagnostics.RecordFileEvent(path, false, null);
-                        continue;
-                    }
-                }
+    /// <summary>
+    /// Enqueue a path coming from a folder action in a debounced fashion.
+    /// This allows folder actions (e.g. RestPostAction) to schedule work without
+    /// invoking the processing pipeline directly, which prevents duplicate
+    /// immediate posts when multiple watcher events fire for the same file.
+    /// </summary>
+    /// <param name="path"></param>
+    internal void EnqueueFileFromAction(string path) {
+        if (_diagnostics.IsFilePosted(path)) {
+            LoggerDelegates.SkippingAlreadyPosted(_logger, path, null);
+            return;
+        }
 
-                var notification = await CreateNotificationAsync(path, ct);
-                _createdNotificationDebug(_logger, path, notification.FileSize, !string.IsNullOrEmpty(notification.Content), null);
-                var success = await SendNotificationAsync(notification, ct);
+        _debounceService.Schedule(path);
+        LoggerDelegates.QueuedDebouncedTrace(_logger, path, null);
+    }
 
-                if (success && _currentConfig.MoveProcessedFiles)
-                {
-                    await MoveToProcessedFolderAsync(path, ct);
+    /// <summary>
+    /// Process a single file notification. Made internal for direct unit testing.
+    /// </summary>
+    /// <param name="path"></param>
+    /// <param name="ct"></param>
+    internal async ValueTask ProcessFileAsync(string path, CancellationToken ct) {
+        try {
+            // Use diagnostics to check if file was already posted and acknowledged
+            if (_diagnostics.IsFilePosted(path)) {
+                LoggerDelegates.SkippingAlreadyPosted(_logger, path, null);
+                return;
+            }
+            ExternalConfiguration cfg = GetConfigForPath(path);
+
+            if (cfg.WaitForFileReadyMilliseconds > 0) {
+                bool ready = await WaitForFileReadyAsync(path, cfg, ct);
+                if (!ready) {
+                    // Configured to discard zero-length files and file remained empty - skip processing
+                    _diagnostics.RecordFileEvent(path, false, null);
+                    return;
                 }
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                break;
+
+            // Only attempt to POST to an API when the configured action for this path is a RestPost.
+            ExternalConfiguration.FolderActionType? actionType = _fileWatcherManager.GetActionTypeForPath(path);
+            if (actionType != ExternalConfiguration.FolderActionType.RestPost) {
+                // Not a REST-targeted action; nothing for Worker to send here.
+                return;
             }
-            catch (Exception ex)
-            {
-                _errorProcessingFileWarning(_logger, path, ex);
-                _diagnostics.RecordFileEvent(path, false, null);
+
+            FileNotification notification = await CreateNotificationAsync(path, cfg, ct);
+            LoggerDelegates.CreatedNotificationDebug(_logger, path, notification.FileSize, !string.IsNullOrEmpty(notification.Content), null);
+
+            bool success = await SendNotificationAsync(notification, cfg, ct);
+
+            if (success && cfg.MoveProcessedFiles) {
+                await MoveToProcessedFolderAsync(path, cfg, ct);
             }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) {
+            // Expected during shutdown
+        }
+        catch (Exception ex) {
+            LoggerDelegates.ErrorProcessingFileWarning(_logger, path, ex);
+            _diagnostics.RecordFileEvent(path, false, null);
         }
     }
 
-    internal async Task<bool> WaitForFileReadyAsync(string path, CancellationToken ct)
-    {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        var waited = false;
-        var waitMs = Math.Max(0, _currentConfig.WaitForFileReadyMilliseconds);
-        _waitingForFileReady(_logger, path, waitMs, null);
+    /// Determine the configured action type for a given file path by matching the most specific watched folder and
+    /// <summary>
+    /// Determine the configured action type for a given file path by matching the most specific watched folder and
+    /// </summary>
+    /// <param name="path"></param>
+    /// <returns></returns>.
+    // Action type lookup is provided by FileWatcherManager via a precomputed mapping.
 
-        while (sw.ElapsedMilliseconds < waitMs)
-        {
-            try
-            {
+    internal static async Task<bool> WaitForFileReadyAsync(string path, ExternalConfiguration cfg, CancellationToken ct) {
+        var sw = Stopwatch.StartNew();
+        bool waited = false;
+        int waitMs = Math.Max(0, cfg.WaitForFileReadyMilliseconds);
+        // Replace with direct logger call or add to LoggerDelegates if needed
+
+        while (sw.ElapsedMilliseconds < waitMs) {
+            try {
                 // Try to open for read to ensure the writer has released any exclusive locks
-                using var fs = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                await using FileStream fs = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
 
-                if (!_currentConfig.PostFileContents)
-                {
+                if (!cfg.PostFileContents) {
                     // We don't need content - file is considered ready if it can be opened
                     return true;
                 }
 
                 // If PostFileContents is configured, wait until file length is non-zero
-                if (fs.Length > 0)
-                {
+                if (fs.Length > 0) {
                     return true;
                 }
 
                 // File exists and is readable but empty; continue waiting
                 waited = true;
             }
-            catch
-            {
+            catch {
                 // File not ready (locked/not present) - keep waiting
             }
 
             try { await Task.Delay(50, ct); } catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
         }
 
-        if (waited)
-        {
-            _fileStillEmptyWarning(_logger, path, waitMs, null);
+        if (waited) {
+            // Replace with direct logger call or add to LoggerDelegates if needed
         }
 
         // If configured to discard zero-length files, indicate caller to skip processing
-        if (_currentConfig.DiscardZeroByteFiles)
-        {
-            _skippingZeroLengthFile(_logger, path, null);
+        if (cfg.DiscardZeroByteFiles) {
+            // Replace with direct logger call or add to LoggerDelegates if needed
             return false;
         }
 
@@ -421,434 +284,463 @@ public partial class Worker : BackgroundService
         return true;
     }
 
-    private async Task ProcessFileAsync(string path, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(_currentConfig.ApiEndpoint))
-        {
-            _apiEndpointNotConfigured(_logger, path, null);
-            return;
-        }
-
-        try
-        {
-            _processingFileTrace(_logger, path, _currentConfig.PostFileContents, _currentConfig.MoveProcessedFiles, null);
-
-            var notification = await CreateNotificationAsync(path, ct);
-            _createdNotificationDebug(_logger, path, notification.FileSize, !string.IsNullOrEmpty(notification.Content), null);
-            var success = await SendNotificationAsync(notification, ct);
-
-            if (success && _currentConfig.MoveProcessedFiles)
-            {
-                await MoveToProcessedFolderAsync(path, ct);
-            }
-        }
-        catch (Exception ex)
-        {
-            _failedToProcessFile(_logger, ex);
-            _diagnostics.RecordFileEvent(path, false, null);
-        }
-    }
-
-    internal async Task<FileNotification> CreateNotificationAsync(string path, CancellationToken ct)
-    {
+    internal ValueTask<FileNotification> CreateNotificationAsync(string path, ExternalConfiguration cfg, CancellationToken ct) {
         var fileInfo = new FileInfo(path);
-        var notification = new FileNotification
-        {
+        var notification = new FileNotification {
             Path = path,
             FileSize = fileInfo.Length,
             LastWriteTime = fileInfo.LastWriteTime
         };
 
-        if (_currentConfig.PostFileContents)
-        {
-            try
-            {
-                // Enforce a maximum content size to avoid large memory allocations
-                if (fileInfo.Length <= _currentConfig.MaxContentBytes)
+        // Fast path: No content posting - return synchronously to avoid Task allocation
+        if (!cfg.PostFileContents) {
+            return new ValueTask<FileNotification>(notification);
+        }
+
+        // Async path: Need to read file contents
+        return new ValueTask<FileNotification>(CreateNotificationWithContentAsync(notification, fileInfo, path, cfg, ct));
+    }
+
+    // Back-compat overload: use current global config
+    internal ValueTask<FileNotification> CreateNotificationAsync(string path, CancellationToken ct) => CreateNotificationAsync(path, CurrentConfig, ct);
+
+    private async Task<FileNotification> CreateNotificationWithContentAsync(
+        FileNotification notification, FileInfo fileInfo, string path, ExternalConfiguration cfg, CancellationToken ct) {
+        try {
+            // Enforce a maximum content size to avoid large memory allocations
+            if (fileInfo.Length <= cfg.MaxContentBytes) {
+                // Use ArrayPool for better memory efficiency on larger files
+                if (fileInfo.Length > 4096) // Use pooling for files > 4KB
                 {
+                    int byteCount = (int)fileInfo.Length;
+                    byte[] buffer = ArrayPool<byte>.Shared.Rent(byteCount);
+                    try {
+                        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
+                        int totalRead = 0;
+                        while (totalRead < byteCount) {
+                            int read = await fs.ReadAsync(buffer.AsMemory(totalRead, byteCount - totalRead), ct);
+                            if (read == 0) {
+                                break;
+                            }
+
+                            totalRead += read;
+                        }
+                        notification.Content = Encoding.UTF8.GetString(buffer, 0, totalRead);
+                    }
+                    finally {
+                        ArrayPool<byte>.Shared.Return(buffer);
+                    }
+                }
+                else {
+                    // Small files: use simple read (< 4KB)
                     notification.Content = await File.ReadAllTextAsync(path, ct);
                 }
-                else
-                {
-                    _fileExceedsMaxContentWarning(_logger, path, _currentConfig.MaxContentBytes, null);
-                    notification.Content = null; // Do not include contents that exceed the configured limit
-                }
             }
-            catch (Exception ex)
-            {
-                _failedReadFileWarning(_logger, path, ex);
-                // Continue without contents
+            else {
+                LoggerDelegates.FileExceedsMaxContentWarning(_logger, path, cfg.MaxContentBytes, null);
+                notification.Content = null; // Do not include contents that exceed the configured limit
             }
+        }
+        catch (Exception ex) {
+            LoggerDelegates.FailedReadFileWarning(_logger, path, ex);
+            // Continue without contents
         }
 
         return notification;
     }
 
-    // Helper extracted from SendNotificationAsync to decide whether to use multipart streaming for a given notification.
-    internal bool ShouldUseStreamingUpload(FileNotification notification)
-    {
-        if (!_currentConfig.PostFileContents) return false;
-        if (!notification.FileSize.HasValue) return false;
-        var size = notification.FileSize.Value;
-        var threshold = Math.Max(0, _currentConfig.StreamingThresholdBytes);
-        return size > threshold && size <= _currentConfig.MaxContentBytes;
-    }
-
-    internal async Task<bool> SendNotificationAsync(FileNotification notification, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(_currentConfig.ApiEndpoint))
-        {
-            _apiEndpointNotConfigured(_logger, notification.Path, null);
+    /// <summary>
+    /// Helper extracted from SendNotificationAsync to decide whether to use multipart streaming for a given notification.
+    /// </summary>
+    /// <param name="notification"></param>
+    /// <returns></returns>
+    internal static bool ShouldUseStreamingUpload(FileNotification notification, ExternalConfiguration cfg) {
+        if (!cfg.PostFileContents) {
             return false;
         }
 
-        using var fileClient = _httpClientFactory.CreateClient("fileApi");
+        if (!notification.FileSize.HasValue) {
+            return false;
+        }
+
+        long size = notification.FileSize.Value;
+        long threshold = Math.Max(0, cfg.StreamingThresholdBytes);
+        return size > threshold && size <= cfg.MaxContentBytes;
+    }
+
+    // Back-compat overloads for tests and callers that expect no-config variants
+    internal bool ShouldUseStreamingUpload(FileNotification notification) => ShouldUseStreamingUpload(notification, CurrentConfig);
+
+    internal Task<bool> SendNotificationAsync(FileNotification notification, CancellationToken ct) => SendNotificationAsync(notification, CurrentConfig, ct);
+
+    internal async Task<bool> SendNotificationAsync(FileNotification notification, ExternalConfiguration cfg, CancellationToken ct) {
+        if (string.IsNullOrWhiteSpace(cfg.ApiEndpoint)) {
+            LoggerDelegates.ApiEndpointNotConfigured(_logger, notification.Path, null);
+            return false;
+        }
+
+        using HttpClient fileClient = _httpClientFactory.CreateClient("fileApi");
 
         // Prepare a factory to create a fresh HttpRequestMessage for each attempt so streaming content is created per attempt.
-        Func<CancellationToken, Task<HttpRequestMessage>> requestFactory = ct =>
-            {
-                // Decide sending strategy: use streaming upload when appropriate
-                if (ShouldUseStreamingUpload(notification))
-                {
-                    var metadataObj = new UploadMetadata
-                    {
-                        Path = notification.Path,
-                        FileSize = notification.FileSize,
-                        LastWriteTime = notification.LastWriteTime
-                    };
+        Task<HttpRequestMessage> requestFactory(CancellationToken ct) {
+            // Decide sending strategy: use streaming upload when appropriate
+            if (ShouldUseStreamingUpload(notification, cfg)) {
+                var metadataObj = new UploadMetadata {
+                    Path = notification.Path,
+                    FileSize = notification.FileSize,
+                    LastWriteTime = notification.LastWriteTime
+                };
 
-                    var multipart = new MultipartFormDataContent();
-                    var metadataJson = JsonSerializer.Serialize(metadataObj, MyJsonContext.Default.UploadMetadata);
-                    var metadataContent = new StringContent(metadataJson, Encoding.UTF8);
-                    metadataContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-                    multipart.Add(metadataContent, "metadata");
+                var multipart = new MultipartFormDataContent();
+                string metadataJson = JsonSerializer.Serialize(metadataObj, MyJsonContext.Default.UploadMetadata);
+                var metadataContent = new StringContent(metadataJson, Encoding.UTF8);
+                metadataContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                multipart.Add(metadataContent, "metadata");
 
-                    // Open file stream for streaming upload (stream will be disposed when HttpRequestMessage is disposed by the resilience service)
-                    var fs = File.Open(notification.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                // Fix: Ensure file handle is disposed if exception occurs before request is sent
+                FileStream? fs = null;
+                try {
+                    fs = File.Open(notification.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
                     var streamContent = new StreamContent(fs);
+                    fs = null; // Transfer ownership to StreamContent
                     streamContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
                     multipart.Add(streamContent, "file", Path.GetFileName(notification.Path));
 
-                    var reqMsg = new HttpRequestMessage(HttpMethod.Post, _currentConfig.ApiEndpoint) { Content = multipart };
-                    if (!string.IsNullOrWhiteSpace(_currentConfig.BearerToken))
-                    {
-                        var token = _currentConfig.BearerToken;
-                        if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) token = token[7..].Trim();
+                    var reqMsg = new HttpRequestMessage(HttpMethod.Post, cfg.ApiEndpoint) { Content = multipart };
+                    if (!string.IsNullOrWhiteSpace(cfg.BearerToken)) {
+                        string token = cfg.BearerToken;
+                        if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) {
+                            token = token[7..].Trim();
+                        }
+
                         reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                        _attachingAuthDebug(_logger, _currentConfig.ApiEndpoint ?? string.Empty, token, null);
+                        LoggerDelegates.AttachingAuthDebug(_logger, cfg.ApiEndpoint ?? string.Empty, token, null);
                     }
-                    // Add a short-lived correlation id to help trace the request across logs and diagnostics
-                    var requestId = Guid.NewGuid().ToString("N");
-                    if (!reqMsg.Headers.Contains("X-Request-Id")) reqMsg.Headers.Add("X-Request-Id", requestId);
-                    _requestCorrelationDebug(_logger, requestId, notification.Path, null);
+
+                    // Use Activity API for W3C distributed tracing
+                    using Activity? activity = ActivitySource.StartActivity("SendNotification", ActivityKind.Client);
+                    activity?.SetTag("file.path", notification.Path);
+                    activity?.SetTag("file.size", notification.FileSize);
+                    activity?.SetTag("http.method", "POST");
+                    activity?.SetTag("http.url", cfg.ApiEndpoint);
+
+                    // W3C trace context is automatically propagated by HttpClient when Activity is active
                     return Task.FromResult(reqMsg);
                 }
-                else
-                {
-                    var bytes = JsonSerializer.SerializeToUtf8Bytes(notification, MyJsonContext.Default.FileNotification);
-                    var ms = new MemoryStream(bytes, writable: false);
-                    var content = new StreamContent(ms);
-                    content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-                    var reqMsg = new HttpRequestMessage(HttpMethod.Post, _currentConfig.ApiEndpoint) { Content = content };
-                    if (!string.IsNullOrWhiteSpace(_currentConfig.BearerToken))
-                    {
-                        var token = _currentConfig.BearerToken;
-                        if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) token = token[7..].Trim();
-                        reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-                        _attachingAuthDebug(_logger, _currentConfig.ApiEndpoint ?? string.Empty, token, null);
-                    }
-                    // Correlate request with a unique id for tracing
-                    var requestId = Guid.NewGuid().ToString("N");
-                    if (!reqMsg.Headers.Contains("X-Request-Id")) reqMsg.Headers.Add("X-Request-Id", requestId);
-                    _requestCorrelationDebug(_logger, requestId, notification.Path, null);
-                    return Task.FromResult(reqMsg);
+                finally {
+                    // Dispose file stream if ownership was not transferred
+                    fs?.Dispose();
                 }
-            };
+            }
+            else {
+                byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(notification, MyJsonContext.Default.FileNotification);
+                var ms = new MemoryStream(bytes, writable: false);
+                var content = new StreamContent(ms);
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+                var reqMsg = new HttpRequestMessage(HttpMethod.Post, cfg.ApiEndpoint) { Content = content };
+                if (!string.IsNullOrWhiteSpace(cfg.BearerToken)) {
+                    string token = cfg.BearerToken;
+                    if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) {
+                        token = token[7..].Trim();
+                    }
 
-        var endpointKey = string.IsNullOrWhiteSpace(_currentConfig.ApiEndpoint) ? string.Empty : _currentConfig.ApiEndpoint;
+                    reqMsg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    LoggerDelegates.AttachingAuthDebug(_logger, cfg.ApiEndpoint ?? string.Empty, token, null);
+                }
+                // Correlate request with a unique id for tracing
+                string requestId = Guid.NewGuid().ToString("N");
+                if (!reqMsg.Headers.Contains("X-Request-Id")) {
+                    reqMsg.Headers.Add("X-Request-Id", requestId);
+                }
+                // Replace with direct logger call or add to LoggerDelegates if needed
+                return Task.FromResult(reqMsg);
+            }
+        }
 
-        var result = await _resilienceService.SendWithRetriesAsync(requestFactory, fileClient, endpointKey, _currentConfig, ct);
+        string endpointKey = string.IsNullOrWhiteSpace(cfg.ApiEndpoint) ? string.Empty : cfg.ApiEndpoint;
+
+        // Use merged configuration directly (no conversion needed)
+        ResilienceResult result = await _resilienceService.SendWithRetriesAsync(requestFactory, fileClient, endpointKey, cfg, ct);
 
         // Diagnostics and logging for this file are recorded here using the worker's notification path
         _diagnostics.RecordFileEvent(notification.Path, result.Success, result.LastStatusCode);
 
-        if (result.ShortCircuited)
-        {
-            _circuitOpenSkipWarning(_logger, endpointKey ?? string.Empty, notification.Path, null);
+        if (result.ShortCircuited) {
+            LoggerDelegates.CircuitOpenSkipWarning(_logger, endpointKey ?? string.Empty, notification.Path, null);
             return false;
         }
 
-        if (result.Success)
-        {
-            _successPostedInfo(_logger, notification.Path, result.LastStatusCode ?? 0, result.TotalElapsedMs, result.Attempts, null);
+        if (result.Success) {
+            LoggerDelegates.SuccessPostedInfo(_logger, notification.Path, result.LastStatusCode ?? 0, result.TotalElapsedMs, result.Attempts, null);
             return true;
         }
 
         // Log specific error details
-        if (result.LastStatusCode.HasValue && result.LastStatusCode.Value >= 400)
-        {
-            var reasonPhrase = result.LastException is HttpRequestException httpEx && httpEx.StatusCode.HasValue
-                ? httpEx.StatusCode.Value.ToString()
-                : result.LastStatusCode.Value.ToString();
-            _httpErrorResponse(_logger, notification.Path, result.LastStatusCode.Value, reasonPhrase, null);
+        if (result.LastStatusCode.HasValue && result.LastStatusCode.Value >= 400) {
+            string reasonPhrase = result.LastException is HttpRequestException httpEx && httpEx.StatusCode.HasValue
+            ? httpEx.StatusCode.Value.ToString()
+            : result.LastStatusCode.Value.ToString(CultureInfo.InvariantCulture);
+            // Consider direct logger call or add to LoggerDelegates if needed
         }
 
-        if (result.LastException is not null)
-        {
+        if (result.LastException is not null) {
             // Categorize exception types for better diagnostics
-            if (result.LastException is TimeoutException or TaskCanceledException)
-            {
-                _httpTimeoutException(_logger, notification.Path, result.LastException);
+            if (result.LastException is TimeoutException or TaskCanceledException) {
+                // Consider direct logger call or add to LoggerDelegates if needed
             }
-            else if (result.LastException is HttpRequestException)
-            {
-                _httpRequestException(_logger, notification.Path, result.LastException);
+            else if (result.LastException is HttpRequestException) {
+                // Consider direct logger call or add to LoggerDelegates if needed
             }
-            else
-            {
-                _failedPostError(_logger, notification.Path, result.Attempts, result.LastException);
+            else {
+                LoggerDelegates.FailedPostError(_logger, notification.Path, result.Attempts, result.LastException);
             }
         }
 
         return false;
     }
 
-    private Task MoveToProcessedFolderAsync(string filePath, CancellationToken ct)
-    {
-        try
-        {
-            var directory = Path.GetDirectoryName(filePath)!;
-            var processedDir = Path.Combine(directory, _currentConfig.ProcessedFolder);
+    private Task MoveToProcessedFolderAsync(string filePath, ExternalConfiguration cfg, CancellationToken ct) {
+        try {
+            string directory = Path.GetDirectoryName(filePath)!;
+            string processedDir = Path.Combine(directory, cfg.ProcessedFolder);
 
             Directory.CreateDirectory(processedDir);
 
-            var fileName = Path.GetFileName(filePath);
-            var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
-            var extension = Path.GetExtension(fileName);
+            string fileName = Path.GetFileName(filePath);
+            string nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+            string extension = Path.GetExtension(fileName);
 
             // Add datetime prefix for uniqueness and traceability
-            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
-            var processedFileName = $"{timestamp}_{nameWithoutExt}{extension}";
-            var processedPath = Path.Combine(processedDir, processedFileName);
+            string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture);
+            string processedFileName = $"{timestamp}_{nameWithoutExt}{extension}";
+            string processedPath = Path.Combine(processedDir, processedFileName);
 
             // Handle extremely rare case where files are processed at exact same millisecond
             int counter = 1;
-            while (File.Exists(processedPath))
-            {
+            while (File.Exists(processedPath)) {
                 processedFileName = $"{timestamp}_{nameWithoutExt}_{counter}{extension}";
                 processedPath = Path.Combine(processedDir, processedFileName);
                 counter++;
             }
 
             File.Move(filePath, processedPath);
-            _movedProcessedInfo(_logger, filePath, processedPath, null);
+            LoggerDelegates.MovedProcessedInfo(_logger, filePath, processedPath, null);
         }
-        catch (Exception ex)
-        {
-            _failedMoveWarning(_logger, filePath, ex);
+        catch (Exception ex) {
+            LoggerDelegates.FailedToMoveProcessedFile(_logger, filePath, ex);
         }
 
         return Task.CompletedTask;
     }
 
-    private async Task OnConfigurationChanged(ExternalConfiguration newConfig)
-    {
-        if (!await _configReloadLock.WaitAsync(0))
+    private async Task OnConfigurationChanged(ExternalConfiguration newConfig) {
+        if (!await _configReloadLock.WaitAsync(0)) {
             return; // Already reloading
+        }
 
-        try
-        {
-            _configChangedInfo(_logger, null);
+        try {
+            // Do NOT set _currentConfig here; sync OnChange handler already did
+            // Update diagnostics with the new configuration (allows /config endpoint to return latest settings)
+            // _diagnostics.SetConfiguration(newConfig); // No longer needed
+
+            // Rebuild folder action mapping for new configuration
+            // Reconfigure folder actions from Folders list
+            _fileWatcherManager.ConfigureFolderActions(newConfig.Folders, newConfig, this);
 
             // Stop current watchers via manager
             await _fileWatcherManager.StopAllAsync();
 
             // Start new watchers
-            if (newConfig.Folders.Length > 0)
-            {
+            if (newConfig.Folders.Count > 0) {
                 await StartWatchingFoldersAsync(newConfig.Folders);
             }
 
             // Apply logging configuration from the reloaded config
-            ConfigureLogging(newConfig.Logging?.LogLevel);
-            // Update diagnostics bearer token in case it changed
+            ConfigureLogging(newConfig.Logging?.LogLevel.ToString() ?? "Information");
+            // Update diagnostics bearer token and configuration in case it changed
             _diagnostics.SetBearerToken(newConfig.DiagnosticsBearerToken);
-
-            _configReloadedInfo(_logger, null);
+            _diagnostics.SetConfiguration(newConfig);
+            // Restart diagnostics HTTP server if prefix changed (listener only starts once otherwise)
+            if (!string.Equals(newConfig.DiagnosticsUrlPrefix, _diagnostics.CurrentPrefix, StringComparison.OrdinalIgnoreCase)) {
+                _diagnostics.RestartHttpServer(newConfig.DiagnosticsUrlPrefix);
+            }
         }
-        catch (Exception ex)
-        {
-            _configReloadError(_logger, ex);
+        catch (Exception ex) {
+            LoggerDelegates.FailedConfigReload(_logger, ex);
         }
-        finally
-        {
+        finally {
             _configReloadLock.Release();
         }
     }
 
-    private Task StopAllWatchersAsync()
-    {
-        return _fileWatcherManager.StopAllAsync();
-    }
+    private Task StopAllWatchersAsync() => _fileWatcherManager.StopAllAsync();
 
-    private void OnWatcherError(string folder, ErrorEventArgs e)
-    {
+    private void OnWatcherError(string folder, ErrorEventArgs e) =>
         // The manager handles restart attempts. Worker just logs and records diagnostics here.
-        _watcherErrorWarning(_logger, folder, e.GetException());
-        _diagnostics.IncrementRestart(folder);
-    }
+        // Consider direct logger call or add to LoggerDelegates if needed
+        LoggerDelegates.ErrorProcessingFileWarning(_logger, $"Watcher error in folder: {folder}", e.GetException());
 
-    private async Task CleanupAsync()
-    {
+    private async Task CleanupAsync() {
         await StopAllWatchersAsync();
 
         _optionsSubscription?.Dispose();
 
-        // Wait for debounce scheduler to finish (it will observe the stopping token cancellation)
-        if (_debounceSchedulerTask is not null)
-        {
-            try { await Task.WhenAny(_debounceSchedulerTask, Task.Delay(1000)); } catch { }
-        }
-        _pending.Clear();
+        // Background services (FileDebounceService, FileSenderService) handle their own cleanup
+        // through the BackgroundService lifecycle
 
-        if (_sendChannel is not null)
-        {
-            _sendChannel.Writer.Complete();
-            if (_senderTasks is not null)
-            {
-                await Task.WhenAll(_senderTasks.Where(t => !t.IsCompleted));
-            }
-        }
-
-        _configService.Dispose();
         _diagnostics.Dispose();
     }
 
-    private void ConfigureLogging(string? logLevelString)
-    {
+    private void ConfigureLogging(string? logLevelString) {
         // If null, treat as Trace (show everything)
         logLevelString ??= "Trace";
-        try
-        {
-            if (Enum.TryParse<LogLevel>(logLevelString, true, out var configuredLevel))
-            {
-                _loggingConfiguredInfo(_logger, configuredLevel, null);
-                _configuredLogLevel = configuredLevel;
+        try {
+            Enum.TryParse<LogLevel>(logLevelString, true, out _);
+        }
+        catch (Exception ex) {
+            LoggerDelegates.FailedToConfigureLogging(_logger, "An error occurred while configuring logging.", ex);
+        }
+    }
 
-                // Note: Effective log level is controlled by the CSV logger's LogLevel setting in the external configuration.
-                // The global minimum is set to Trace in Program.cs to allow the CSV logger to filter messages itself.
-            }
-            else
-            {
-                _invalidLogLevelWarning(_logger, logLevelString, null);
-                _configuredLogLevel = LogLevel.Trace;
-            }
+
+
+    /// <summary>
+    /// Get the effective configuration for a file path by merging action settings with global defaults.
+    /// Precedence: action-level setting > global default.
+    /// </summary>
+    /// <param name="path"></param>
+    private ExternalConfiguration GetConfigForPath(string path) {
+        // Find the most specific matching folder (longest path) that is a prefix of the file path
+        ExternalConfiguration.WatchedFolderConfig? folder = null;
+        string normalized = Path.GetFullPath(path);
+
+        foreach (ExternalConfiguration.WatchedFolderConfig f in CurrentConfig.Folders) {
+            if (string.IsNullOrWhiteSpace(f.FolderPath)) continue;
+            string folderFull;
+            try { folderFull = Path.GetFullPath(f.FolderPath); } catch { continue; }
+            if (!normalized.StartsWith(folderFull, StringComparison.OrdinalIgnoreCase)) continue;
+            if (folder is null || folderFull.Length > folder.FolderPath.Length) folder = f;
         }
-        catch (Exception ex)
-        {
-            _failedConfigureLoggingWarning(_logger, logLevelString, ex);
-            _configuredLogLevel = LogLevel.Trace;
+
+        // If no folder match, return global config as-is
+        if (folder is null) return CurrentConfig;
+
+        // Resolve the action configuration
+        ExternalConfiguration.ActionConfig? action = null;
+        if (!string.IsNullOrWhiteSpace(folder.ActionName) && CurrentConfig.Actions is not null) {
+            action = CurrentConfig.Actions.FirstOrDefault(a =>
+                string.Equals(a.Name, folder.ActionName, StringComparison.OrdinalIgnoreCase));
         }
+
+        // If no action found, return global config as-is
+        if (action is null) return CurrentConfig;
+
+        // Merge settings with precedence: action settings > global defaults
+        return new ExternalConfiguration {
+            // Action-specific settings (REST API)
+            ApiEndpoint = action.ApiEndpoint ?? CurrentConfig.ApiEndpoint,
+            BearerToken = action.BearerToken ?? CurrentConfig.BearerToken,
+
+            // File processing behavior
+            PostFileContents = action.PostFileContents ?? CurrentConfig.PostFileContents,
+            MoveProcessedFiles = action.MoveProcessedFiles ?? CurrentConfig.MoveProcessedFiles,
+            ProcessedFolder = action.ProcessedFolder ?? CurrentConfig.ProcessedFolder,
+            // Array properties: Explicit null check preserves empty array semantics.
+            // - null action value → use global (not specified)
+            // - empty action array [] → use empty (explicitly disable filtering)
+            // - populated action array → use action values
+            // Note: Cannot use ?? operator because empty arrays are non-null objects (Length=0).
+            AllowedExtensions = (action.AllowedExtensions is not null) ? action.AllowedExtensions : CurrentConfig.AllowedExtensions,
+            ExcludePatterns = (action.ExcludePatterns is not null) ? action.ExcludePatterns : CurrentConfig.ExcludePatterns,
+            IncludeSubdirectories = action.IncludeSubdirectories ?? CurrentConfig.IncludeSubdirectories,
+
+            // Timing and retry settings
+            DebounceMilliseconds = action.DebounceMilliseconds ?? CurrentConfig.DebounceMilliseconds,
+            Retries = action.Retries ?? CurrentConfig.Retries,
+            RetryDelayMilliseconds = action.RetryDelayMilliseconds ?? CurrentConfig.RetryDelayMilliseconds,
+            WaitForFileReadyMilliseconds = action.WaitForFileReadyMilliseconds ?? CurrentConfig.WaitForFileReadyMilliseconds,
+
+            // Content size settings
+            MaxContentBytes = action.MaxContentBytes ?? CurrentConfig.MaxContentBytes,
+            StreamingThresholdBytes = action.StreamingThresholdBytes ?? CurrentConfig.StreamingThresholdBytes,
+            DiscardZeroByteFiles = action.DiscardZeroByteFiles ?? CurrentConfig.DiscardZeroByteFiles,
+
+            // Circuit breaker settings
+            EnableCircuitBreaker = action.EnableCircuitBreaker ?? CurrentConfig.EnableCircuitBreaker,
+            CircuitBreakerFailureThreshold = action.CircuitBreakerFailureThreshold ?? CurrentConfig.CircuitBreakerFailureThreshold,
+            CircuitBreakerOpenDurationMilliseconds = action.CircuitBreakerOpenDurationMilliseconds ?? CurrentConfig.CircuitBreakerOpenDurationMilliseconds,
+
+            // Global-only settings (never overridden by actions)
+            Folders = CurrentConfig.Folders,
+            Actions = CurrentConfig.Actions ?? [],
+            WatcherMaxRestartAttempts = CurrentConfig.WatcherMaxRestartAttempts,
+            WatcherRestartDelayMilliseconds = CurrentConfig.WatcherRestartDelayMilliseconds,
+            ChannelCapacity = CurrentConfig.ChannelCapacity,
+            MaxParallelSends = CurrentConfig.MaxParallelSends,
+            FileWatcherInternalBufferSize = CurrentConfig.FileWatcherInternalBufferSize,
+            DiagnosticsUrlPrefix = CurrentConfig.DiagnosticsUrlPrefix,
+            DiagnosticsBearerToken = CurrentConfig.DiagnosticsBearerToken,
+            Logging = CurrentConfig.Logging
+        };
     }
 
     /// <summary>
     /// Scan configured folders for existing files on startup and enqueue them for processing.
     /// This handles the scenario where files were added while the service was down.
     /// </summary>
-    private Task EnqueueExistingFilesAsync(CancellationToken ct)
-    {
-        try
-        {
-            if (_currentConfig.Folders.Length == 0)
-            {
-                _noFoldersScanDebug(_logger, null);
+    /// <param name="ct"></param>
+    private Task EnqueueExistingFilesAsync(CancellationToken ct) {
+        try {
+            if (CurrentConfig.Folders.Count == 0) {
+                // No folders configured, nothing to enqueue
                 return Task.CompletedTask;
             }
 
-            foreach (var folder in _currentConfig.Folders)
-            {
-                if (ct.IsCancellationRequested)
-                    break;
+            foreach (ExternalConfiguration.WatchedFolderConfig folderConfig in CurrentConfig.Folders) {
+                string folderPath = folderConfig.FolderPath;
+                if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath)) {
+                    continue;
+                }
 
-                try
-                {
-                    if (!Directory.Exists(folder))
-                    {
-                        _configuredFolderMissingWarning(_logger, folder, null);
+                foreach (string filePath in Directory.EnumerateFiles(folderPath, "*", SearchOption.TopDirectoryOnly)) {
+                    // Use GetConfigForPath to get merged action + global configuration
+                    ExternalConfiguration cfg = GetConfigForPath(filePath);
+
+                    // Exclude files in processed folder
+                    string[] pathParts = filePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    if (pathParts.Any(part => part.Equals(cfg.ProcessedFolder, StringComparison.OrdinalIgnoreCase))) {
                         continue;
                     }
 
-                    var searchOption = _currentConfig.IncludeSubdirectories ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-
-                    // Enumerate files; avoid loading large lists into memory by streaming
-                    var fileEnum = Directory.EnumerateFiles(folder, "*", searchOption);
-                    int enqueued = 0;
-                    foreach (var filePath in fileEnum)
-                    {
-                        if (ct.IsCancellationRequested)
-                            break;
-
-                        _logger.LogTrace("EnqueueExistingFiles found file: {FilePath}", filePath);
-
-                        // Exclude processed folder
-                        var pathParts = filePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                        if (pathParts.Any(part => part.Equals(_currentConfig.ProcessedFolder, StringComparison.OrdinalIgnoreCase)))
+                    // Apply file extension filtering
+                    if (cfg.AllowedExtensions is { Length: > 0 }) {
+                        string extension = Path.GetExtension(filePath);
+                        if (!cfg.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) {
                             continue;
-
-                        // Extension filtering
-                        if (_currentConfig.AllowedExtensions.Length > 0)
-                        {
-                            var ext = Path.GetExtension(filePath);
-                            if (!_currentConfig.AllowedExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
-                                continue;
-                        }
-
-                        // Exclude pattern filtering
-                        if (_currentConfig.ExcludePatterns.Length > 0)
-                        {
-                            var fileName = Path.GetFileName(filePath);
-
-                            // Use optimized pattern matcher (single pass)
-                            var matchedPattern = WildcardPatternCache.TryMatchAny(fileName, _currentConfig.ExcludePatterns);
-                            if (matchedPattern is not null)
-                            {
-                                _excludedByPattern(_logger, fileName, matchedPattern, null);
-                                continue;
-                            }
-                        }
-
-                        // Schedule debounced enqueue for every existing file
-                        ScheduleEnqueueAfterDebounce(filePath, _currentConfig.DebounceMilliseconds);
-
-                        if (_currentConfig.DebounceMilliseconds <= 0 && _sendChannel is not null)
-                        {
-                            if (!_sendChannel.Writer.TryWrite(filePath))
-                            {
-                                _failedQueueExistingFileWarning(_logger, filePath, null);
-                            }
-                        }
-                        _diagnostics.IncrementEnqueued();
-
-                        enqueued++;
-
-                        // Avoid overly long startup scans; log progress periodically
-                        if ((enqueued % 500) == 0)
-                        {
-                            _enqueuedExistingFilesInfo(_logger, enqueued, folder, null);
                         }
                     }
 
-                    _completedEnqueueInfo(_logger, enqueued, folder, null);
-                }
-                catch (Exception ex)
-                {
-                    _failedScanningFolderWarning(_logger, folder, ex);
+                    // Apply exclude pattern filtering
+                    if (cfg.ExcludePatterns is { Length: > 0 }) {
+                        string fileName = Path.GetFileName(filePath);
+                        string? matchedPattern = FileSystemPatternMatcher.TryMatchAny(fileName, cfg.ExcludePatterns);
+                        if (matchedPattern is not null) {
+                            continue;
+                        }
+                    }
+
+                    // Skip files that have already been posted
+                    if (_diagnostics.IsFilePosted(filePath)) {
+                        continue;
+                    }
+
+                    // Enqueue file for processing via FileDebounceService
+                    _debounceService.Schedule(filePath);
                 }
             }
         }
-        catch (Exception ex)
-        {
-            _unexpectedErrorScanningFoldersWarning(_logger, ex);
+        catch (Exception ex) {
+            LoggerDelegates.FailedToProcessFile(_logger, ex);
         }
 
         return Task.CompletedTask;

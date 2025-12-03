@@ -1,53 +1,64 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <LangVersion>13.0</LangVersion>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>dotnet-FileWatchRest-80d6e3cd-c132-403f-8533-841c30ef72d8</UserSecretsId>
-    <!-- Assembly and package information -->
-    <AssemblyTitle>FileWatchRest</AssemblyTitle>
-    <AssemblyDescription>Modern file watching service with REST API integration</AssemblyDescription>
-    <AssemblyCompany>FileWatchRest</AssemblyCompany>
-    <AssemblyProduct>FileWatchRest</AssemblyProduct>
-    <AssemblyCopyright>Copyright FileWatchRest 2025</AssemblyCopyright>
-    <!-- Version information -->
-    <Version>0.1.0</Version>
-    <AssemblyVersion>0.1.0</AssemblyVersion>
-    <FileVersion>0.1.0.0</FileVersion>
-    <!-- Repository information -->
-    <RepositoryUrl>https://github.com/trackd/FileWatchRest</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <RepositoryBranch>main</RepositoryBranch>
-    <!--
-      Native AOT settings are intentionally made conditional so regular builds and non-AOT
-      publishes don't require the Native AOT toolchain (Visual C++ build tools, platform linker).
-
-      To produce a Native AOT Windows x64 publish, run this from the repo root:
-        dotnet publish -c Release -r win-x64 -p:PublishAot=true -p:PublishTrimmed=true
-    -p:PublishSingleFile=true -p:SelfContained=true
-
-      The properties below are applied only when PublishAot=true is set (see the conditional
-    PropertyGroup).
-    -->
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <PublishAot>true</PublishAot>
-    <PublishTrimmed>true</PublishTrimmed>
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
-    <TrimMode>link</TrimMode>
-    <DefineConstants>$(DefineConstants);PUBLISH_AOT</DefineConstants>
-  </PropertyGroup>
-  <PropertyGroup>
-    <!-- Enable .NET analyzers but don't force treat warnings as errors here; CI will enforce stricter policies -->
-    <EnableNETAnalyzers>true</EnableNETAnalyzers>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0-preview.7.25380.108" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.0" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
-  </ItemGroup>
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <LangVersion>13.0</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <UserSecretsId>dotnet-FileWatchRest-80d6e3cd-c132-403f-8533-841c30ef72d8</UserSecretsId>
+        <!-- Assembly and package information -->
+        <AssemblyTitle>FileWatchRest</AssemblyTitle>
+        <AssemblyDescription>Modern file watching service with REST API integration</AssemblyDescription>
+        <AssemblyCompany>FileWatchRest</AssemblyCompany>
+        <AssemblyProduct>FileWatchRest</AssemblyProduct>
+        <AssemblyCopyright>Copyright FileWatchRest 2025</AssemblyCopyright>
+        <Version>0.4.1</Version>
+        <AssemblyVersion>0.4.1</AssemblyVersion>
+        <FileVersion>0.4.1.0</FileVersion>
+        <!-- Repository information -->
+        <RepositoryUrl>https://github.com/trackd/FileWatchRest</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <RepositoryBranch>main</RepositoryBranch>
+        <ApplicationGuid>D179783F-B2AC-4B8C-9CA3-FCDB61236484</ApplicationGuid>
+    </PropertyGroup>
+    <!-- Enable SourceLink and portable PDBs for Debug, Release, or CI builds.
+        Producing portable PDBs with SourceLink in CI/Release improves post-mortem
+        debugging and symbolication of production crash dumps. EmbedUntrackedSources
+        is enabled for Debug only to help local troubleshooting; CI/Release will not
+        embed untracked sources to avoid leaking worktree state. -->
+    <PropertyGroup
+        Condition="'$(Configuration)'=='Debug' Or '$(Configuration)'=='Release' Or '$(CI)'=='true'">
+        <DebugType>portable</DebugType>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    </PropertyGroup>
+    <ItemGroup
+        Condition="'$(Configuration)'=='Debug' Or '$(Configuration)'=='Release' Or '$(CI)'=='true'">
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.*" PrivateAssets="all" />
+    </ItemGroup>
+    <PropertyGroup Condition="'$(PublishAot)' == 'true'">
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <PublishAot>true</PublishAot>
+        <PublishTrimmed>true</PublishTrimmed>
+        <PublishSingleFile>true</PublishSingleFile>
+        <SelfContained>true</SelfContained>
+        <TrimMode>link</TrimMode>
+        <DefineConstants>$(DefineConstants);PUBLISH_AOT</DefineConstants>
+    </PropertyGroup>
+    <PropertyGroup>
+        <EnableNETAnalyzers>true</EnableNETAnalyzers>
+        <CodeAnalysisTreatWarningsAsErrors>true</CodeAnalysisTreatWarningsAsErrors>
+        <AnalysisLevel>latest-Recommended</AnalysisLevel>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="7.*">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
+        <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+    </ItemGroup>
 </Project>
