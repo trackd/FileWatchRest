@@ -23,14 +23,12 @@ public class FolderActionDispatchTests {
 
         manager.ConfigureFolderActions(configs, globalConfig, worker);
 
-        Dictionary<string, List<IFolderAction>> dict = manager._folderActions;
+        Dictionary<string, IFolderAction?> dict = manager._folderActions;
 
         Assert.True(dict.ContainsKey("C:/test1"));
         Assert.True(dict.ContainsKey("C:/test2"));
-        Assert.Single(dict["C:/test1"]);
-        Assert.Single(dict["C:/test2"]);
-        Assert.IsType<RestPostAction>(dict["C:/test1"][0]);
-        Assert.IsType<PowerShellScriptAction>(dict["C:/test2"][0]);
+        Assert.IsType<RestPostAction>(dict["C:/test1"]);
+        Assert.IsType<PowerShellScriptAction>(dict["C:/test2"]);
     }
 
     [Fact(DisplayName = "HandleFileEvent_ExecutesMappedActions")]
@@ -42,7 +40,7 @@ public class FolderActionDispatchTests {
         bool called = false;
         var mockAction = new MockFolderAction(() => called = true);
         manager._folderActions.Clear();
-        manager._folderActions["C:/test"] = [mockAction];
+        manager._folderActions["C:/test"] = mockAction;
 
         manager.HandleFileEvent("C:/test", new FileSystemEventArgs(WatcherChangeTypes.Created, "C:/test", "file.txt"));
 

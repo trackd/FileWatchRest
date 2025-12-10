@@ -257,6 +257,90 @@ public class ExternalConfiguration {
     /// Logging configuration (provider-agnostic)
     /// </summary>
     public SimpleFileLoggerOptions Logging { get; set; } = new SimpleFileLoggerOptions();
+
+    /// <summary>
+    /// Merge an optional action-level configuration into the provided global configuration.
+    /// Action settings take precedence over global defaults. Arrays follow the semantics:
+    /// - null action array -> use global
+    /// - empty action array   -> use empty (explicitly disable filtering)
+    /// </summary>
+    /// <param name="global"></param>
+    /// <param name="action"></param>
+    /// <returns>Merged configuration for runtime use.</returns>
+    public static ExternalConfiguration MergeWithAction(ExternalConfiguration global, ActionConfig? action) {
+        if (global is null) return new ExternalConfiguration();
+
+        if (action is null) {
+            // Return a shallow copy of global to avoid accidental mutation by callers
+            return new ExternalConfiguration {
+                ApiEndpoint = global.ApiEndpoint,
+                BearerToken = global.BearerToken,
+                PostFileContents = global.PostFileContents,
+                MoveProcessedFiles = global.MoveProcessedFiles,
+                ProcessedFolder = global.ProcessedFolder,
+                AllowedExtensions = global.AllowedExtensions ?? [],
+                ExcludePatterns = global.ExcludePatterns ?? [],
+                IncludeSubdirectories = global.IncludeSubdirectories,
+                DebounceMilliseconds = global.DebounceMilliseconds,
+                Retries = global.Retries,
+                RetryDelayMilliseconds = global.RetryDelayMilliseconds,
+                WaitForFileReadyMilliseconds = global.WaitForFileReadyMilliseconds,
+                MaxContentBytes = global.MaxContentBytes,
+                StreamingThresholdBytes = global.StreamingThresholdBytes,
+                DiscardZeroByteFiles = global.DiscardZeroByteFiles,
+                EnableCircuitBreaker = global.EnableCircuitBreaker,
+                CircuitBreakerFailureThreshold = global.CircuitBreakerFailureThreshold,
+                CircuitBreakerOpenDurationMilliseconds = global.CircuitBreakerOpenDurationMilliseconds,
+                Folders = global.Folders,
+                Actions = global.Actions ?? [],
+                WatcherMaxRestartAttempts = global.WatcherMaxRestartAttempts,
+                WatcherRestartDelayMilliseconds = global.WatcherRestartDelayMilliseconds,
+                ChannelCapacity = global.ChannelCapacity,
+                MaxParallelSends = global.MaxParallelSends,
+                FileWatcherInternalBufferSize = global.FileWatcherInternalBufferSize,
+                DiagnosticsUrlPrefix = global.DiagnosticsUrlPrefix,
+                DiagnosticsBearerToken = global.DiagnosticsBearerToken,
+                Logging = global.Logging
+            };
+        }
+
+        return new ExternalConfiguration {
+            ApiEndpoint = action.ApiEndpoint ?? global.ApiEndpoint,
+            BearerToken = action.BearerToken ?? global.BearerToken,
+
+            PostFileContents = action.PostFileContents ?? global.PostFileContents,
+            MoveProcessedFiles = action.MoveProcessedFiles ?? global.MoveProcessedFiles,
+            ProcessedFolder = action.ProcessedFolder ?? global.ProcessedFolder,
+            AllowedExtensions = (action.AllowedExtensions is not null) ? action.AllowedExtensions : (global.AllowedExtensions ?? []),
+            ExcludePatterns = (action.ExcludePatterns is not null) ? action.ExcludePatterns : (global.ExcludePatterns ?? []),
+            IncludeSubdirectories = action.IncludeSubdirectories ?? global.IncludeSubdirectories,
+
+            DebounceMilliseconds = action.DebounceMilliseconds ?? global.DebounceMilliseconds,
+            Retries = action.Retries ?? global.Retries,
+            RetryDelayMilliseconds = action.RetryDelayMilliseconds ?? global.RetryDelayMilliseconds,
+            WaitForFileReadyMilliseconds = action.WaitForFileReadyMilliseconds ?? global.WaitForFileReadyMilliseconds,
+
+            MaxContentBytes = action.MaxContentBytes ?? global.MaxContentBytes,
+            StreamingThresholdBytes = action.StreamingThresholdBytes ?? global.StreamingThresholdBytes,
+            DiscardZeroByteFiles = action.DiscardZeroByteFiles ?? global.DiscardZeroByteFiles,
+
+            EnableCircuitBreaker = action.EnableCircuitBreaker ?? global.EnableCircuitBreaker,
+            CircuitBreakerFailureThreshold = action.CircuitBreakerFailureThreshold ?? global.CircuitBreakerFailureThreshold,
+            CircuitBreakerOpenDurationMilliseconds = action.CircuitBreakerOpenDurationMilliseconds ?? global.CircuitBreakerOpenDurationMilliseconds,
+
+            // Global-only settings
+            Folders = global.Folders,
+            Actions = global.Actions ?? [],
+            WatcherMaxRestartAttempts = global.WatcherMaxRestartAttempts,
+            WatcherRestartDelayMilliseconds = global.WatcherRestartDelayMilliseconds,
+            ChannelCapacity = global.ChannelCapacity,
+            MaxParallelSends = global.MaxParallelSends,
+            FileWatcherInternalBufferSize = global.FileWatcherInternalBufferSize,
+            DiagnosticsUrlPrefix = global.DiagnosticsUrlPrefix,
+            DiagnosticsBearerToken = global.DiagnosticsBearerToken,
+            Logging = global.Logging
+        };
+    }
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<LogType>))]

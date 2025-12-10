@@ -21,6 +21,8 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
     private readonly FileSystemEventHandler? _changedHandler;
     private readonly FileSystemEventHandler? _createdHandler;
     private readonly RenamedEventHandler? _renamedHandler;
+    // Keep last raw JSON loaded to ignore identical change events (prevents reload loops).
+    private string? _lastLoadedRawJson;
 
 
     /// <summary>
@@ -55,13 +57,38 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
             _changedHandler = async (sender, args) => {
                 // debounce slightly
                 await Task.Delay(150).ConfigureAwait(false);
+
+                // Fast-path: read the file and compare to last-known raw content. If identical,
+                // skip the expensive LoadAndMigrate and notification path entirely. This
+                // prevents loops where our own writes or external filewatcher quirks produce
+                // repeated change events without content changes.
+                string? currentText = null;
+                try {
+                    if (File.Exists(_configPath)) {
+                        currentText = await File.ReadAllTextAsync(_configPath).ConfigureAwait(false);
+                    }
+                }
+                catch (IOException) {
+                    // Could not read yet — fall through to the normal retry/load behavior.
+                    currentText = null;
+                }
+
+                if (currentText is not null) {
+                    lock (_sync) {
+                        if (_lastLoadedRawJson is not null && string.Equals(_lastLoadedRawJson, currentText, StringComparison.Ordinal)) {
+                            LoggerDelegates.ConfigChangeIgnored(_logger, _configPath, null);
+                            return;
+                        }
+                    }
+                }
+
                 // Try a few times to load the updated file to account for platform timing
                 const int maxAttempts = 6;
                 int attempt = 0;
                 while (attempt++ < maxAttempts) {
                     try {
                         ExternalConfiguration newCfg = await LoadAndMigrateAsync(CancellationToken.None).ConfigureAwait(false);
-                        lock (_sync) { CurrentValue = newCfg; }
+                        lock (_sync) { CurrentValue = newCfg; _lastLoadedRawJson = currentText; }
                         NotifyListeners(newCfg);
                         break;
                     }
@@ -140,6 +167,9 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
         }
 
         string json = await File.ReadAllTextAsync(_configPath, ct);
+        // Remember the exact raw JSON we loaded so subsequent identical change
+        // events can be ignored by the watcher handler.
+        lock (_sync) { _lastLoadedRawJson = json; }
         JsonDocument? doc = null;
         try { doc = JsonDocument.Parse(json); } catch { doc = null; }
 
@@ -408,8 +438,21 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
                                 }
 
                                 string outJson = root.ToJsonString(MyJsonContext.SaveOptions);
-                                await File.WriteAllTextAsync(_configPath, outJson, ct);
-                                LoggerDelegates.ConfigSaved(_logger, _configPath, null);
+                                // Only write back when the serialized output actually differs from
+                                // the on-disk content. This prevents a write -> reload -> write
+                                // loop when normalizing/encrypting tokens or adding empty arrays.
+                                if (!string.Equals(outJson, json, StringComparison.Ordinal)) {
+                                    bool disabled = false;
+                                    try {
+                                        if (_watcher is not null) { try { _watcher.EnableRaisingEvents = false; disabled = true; } catch { } }
+                                        await AtomicWriteTextAsync(_configPath, outJson, ct);
+                                        lock (_sync) { _lastLoadedRawJson = outJson; }
+                                        LoggerDelegates.ConfigSaved(_logger, _configPath, null);
+                                    }
+                                    finally {
+                                        if (disabled) { try { _watcher!.EnableRaisingEvents = true; } catch { } }
+                                    }
+                                }
                             }
                             else {
                                 // fallback: couldn't get a mutable JsonObject for the original
@@ -455,8 +498,16 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
         try {
             // Use the source-generated context for AOT/native AOT compatibility
             string json = JsonSerializer.Serialize(cfg, MyJsonContext.Default.ExternalConfiguration);
-            await AtomicWriteTextAsync(_configPath, json, ct);
-            LoggerDelegates.ConfigSaved(_logger, _configPath, null);
+            bool disabled = false;
+            try {
+                if (_watcher is not null) { try { _watcher.EnableRaisingEvents = false; disabled = true; } catch { } }
+                await AtomicWriteTextAsync(_configPath, json, ct);
+                lock (_sync) { _lastLoadedRawJson = json; }
+                LoggerDelegates.ConfigSaved(_logger, _configPath, null);
+            }
+            finally {
+                if (disabled) { try { _watcher!.EnableRaisingEvents = true; } catch { } }
+            }
         }
         catch (Exception ex) {
             LoggerDelegates.FailedToSave(_logger, _configPath, ex);

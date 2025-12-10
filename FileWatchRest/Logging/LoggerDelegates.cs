@@ -47,6 +47,8 @@ internal static class LoggerDelegates {
         LoggerMessage.Define(LogLevel.Warning, new EventId(618, "FailedToStartWatcher"), "Failed to start watching configuration file");
     internal static readonly Action<ILogger<ExternalConfigurationOptionsMonitor>, string, Exception?> ConfigReloadedInfo =
         LoggerMessage.Define<string>(LogLevel.Information, new EventId(619, "ConfigReloaded"), "Configuration reloaded from {Path}");
+    internal static readonly Action<ILogger<ExternalConfigurationOptionsMonitor>, string, Exception?> ConfigChangeIgnored =
+        LoggerMessage.Define<string>(LogLevel.Debug, new EventId(624, "ConfigChangeIgnored"), "Ignored config change because content identical to last load: {Path}");
     internal static readonly Action<ILogger<ExternalConfigurationOptionsMonitor>, Exception?> FailedReloadWarning =
         LoggerMessage.Define(LogLevel.Warning, new EventId(620, "FailedReloadAfterChange"), "Failed to reload configuration after file change");
     internal static readonly Action<ILogger<ExternalConfigurationOptionsMonitor>, string, Exception?> AutogenDiagnosticsToken =
@@ -85,6 +87,8 @@ internal static class LoggerDelegates {
     /// </summary>
     internal static readonly Action<ILogger<FileWatcherManager>, string, Exception?> WatchingFolder =
         LoggerMessage.Define<string>(LogLevel.Information, new EventId(301, "WatchingFolder"), "Watching folder: {Folder}");
+    internal static readonly Action<ILogger<FileWatcherManager>, string, string, bool, int, Exception?> WatchingFolderConfigured =
+        LoggerMessage.Define<string, string, bool, int>(LogLevel.Information, new EventId(318, "WatchingFolderConfigured"), "Watching folder: {Folder}; filters: {Filters}; includeSubdirectories: {IncludeSubdirs}; internalBufferSize: {BufferSize}");
     internal static readonly Action<ILogger<FileWatcherManager>, string, Exception?> FailedToWatchFolder =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(302, "FailedToWatchFolder"), "Failed to watch folder {Folder}");
     internal static readonly Action<ILogger<FileWatcherManager>, string, Exception?> WatcherAccessDenied =

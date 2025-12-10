@@ -119,7 +119,13 @@ public partial class Worker : BackgroundService {
         }
 
         // Determine effective config for this path (merge action with global defaults)
-        ExternalConfiguration cfg = GetConfigForPath(path);
+        ExternalConfiguration cfg;
+        if (!_fileWatcherManager.TryGetFolderContextForPath(path, CurrentConfig, out ExternalConfiguration tmpCfg, out _, out _)) {
+            cfg = CurrentConfig;
+        }
+        else {
+            cfg = tmpCfg;
+        }
 
         // Exclude files in the processed folder to prevent infinite loops
         string[] pathParts = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -174,6 +180,40 @@ public partial class Worker : BackgroundService {
     /// </summary>
     /// <param name="path"></param>
     internal void EnqueueFileFromAction(string path) {
+        // Determine effective config for this path (merge action with global defaults)
+        ExternalConfiguration cfg;
+        if (!_fileWatcherManager.TryGetFolderContextForPath(path, CurrentConfig, out ExternalConfiguration tmpCfg, out _, out _)) {
+            cfg = CurrentConfig;
+        }
+        else {
+            cfg = tmpCfg;
+        }
+
+        // Exclude files in the processed folder to prevent infinite loops
+        string[] pathParts = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (pathParts.Any(part => part.Equals(cfg.ProcessedFolder, StringComparison.OrdinalIgnoreCase))) {
+            LoggerDelegates.IgnoredFileInProcessed(_logger, path, null);
+            return;
+        }
+
+        // Apply file extension filtering
+        if (cfg.AllowedExtensions is { Length: > 0 }) {
+            string extension = Path.GetExtension(path);
+            if (!cfg.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) {
+                return;
+            }
+        }
+
+        // Apply exclude pattern filtering
+        if (cfg.ExcludePatterns is { Length: > 0 }) {
+            string fileName = Path.GetFileName(path);
+            string? matchedPattern = FileSystemPatternMatcher.TryMatchAny(fileName, cfg.ExcludePatterns);
+            if (matchedPattern is not null) {
+                LoggerDelegates.ExcludedByPattern(_logger, fileName, matchedPattern, null);
+                return;
+            }
+        }
+
         if (_diagnostics.IsFilePosted(path)) {
             LoggerDelegates.SkippingAlreadyPosted(_logger, path, null);
             return;
@@ -195,7 +235,11 @@ public partial class Worker : BackgroundService {
                 LoggerDelegates.SkippingAlreadyPosted(_logger, path, null);
                 return;
             }
-            ExternalConfiguration cfg = GetConfigForPath(path);
+            // Resolve folder-level context (merged runtime config and configured action)
+            if (!_fileWatcherManager.TryGetFolderContextForPath(path, CurrentConfig, out ExternalConfiguration cfg, out IFolderAction? action, out string? matchedFolder)) {
+                // No configured folder for this path -> nothing to do
+                return;
+            }
 
             if (cfg.WaitForFileReadyMilliseconds > 0) {
                 bool ready = await WaitForFileReadyAsync(path, cfg, ct);
@@ -206,19 +250,27 @@ public partial class Worker : BackgroundService {
                 }
             }
 
-            // Only attempt to POST to an API when the configured action for this path is a RestPost.
-            ExternalConfiguration.FolderActionType? actionType = _fileWatcherManager.GetActionTypeForPath(path);
-            if (actionType != ExternalConfiguration.FolderActionType.RestPost) {
-                // Not a REST-targeted action; nothing for Worker to send here.
-                return;
-            }
-
+            // Build notification once and let actions handle it (REST actions will post it).
             FileNotification notification = await CreateNotificationAsync(path, cfg, ct);
             LoggerDelegates.CreatedNotificationDebug(_logger, path, notification.FileSize, !string.IsNullOrEmpty(notification.Content), null);
 
-            bool success = await SendNotificationAsync(notification, cfg, ct);
+            bool anySuccess = false;
+            if (action is not null) {
+                try {
+                    if (action is RestPostAction) {
+                        bool success = await SendNotificationAsync(notification, cfg, ct);
+                        anySuccess = anySuccess || success;
+                    }
+                    else {
+                        await action.ExecuteAsync(new FileEventRecord { Path = path }, ct);
+                    }
+                }
+                catch (Exception ex) {
+                    LoggerDelegates.ErrorProcessingFileWarning(_logger, path, ex);
+                }
+            }
 
-            if (success && cfg.MoveProcessedFiles) {
+            if (anySuccess && cfg.MoveProcessedFiles) {
                 await MoveToProcessedFolderAsync(path, cfg, ct);
             }
         }
@@ -243,7 +295,6 @@ public partial class Worker : BackgroundService {
         var sw = Stopwatch.StartNew();
         bool waited = false;
         int waitMs = Math.Max(0, cfg.WaitForFileReadyMilliseconds);
-        // Replace with direct logger call or add to LoggerDelegates if needed
 
         while (sw.ElapsedMilliseconds < waitMs) {
             try {
@@ -539,10 +590,6 @@ public partial class Worker : BackgroundService {
         }
 
         try {
-            // Do NOT set _currentConfig here; sync OnChange handler already did
-            // Update diagnostics with the new configuration (allows /config endpoint to return latest settings)
-            // _diagnostics.SetConfiguration(newConfig); // No longer needed
-
             // Rebuild folder action mapping for new configuration
             // Reconfigure folder actions from Folders list
             _fileWatcherManager.ConfigureFolderActions(newConfig.Folders, newConfig, this);
@@ -609,7 +656,7 @@ public partial class Worker : BackgroundService {
     /// Precedence: action-level setting > global default.
     /// </summary>
     /// <param name="path"></param>
-    private ExternalConfiguration GetConfigForPath(string path) {
+    internal ExternalConfiguration GetConfigForPath(string path) {
         // Find the most specific matching folder (longest path) that is a prefix of the file path
         ExternalConfiguration.WatchedFolderConfig? folder = null;
         string normalized = Path.GetFullPath(path);
@@ -635,53 +682,8 @@ public partial class Worker : BackgroundService {
         // If no action found, return global config as-is
         if (action is null) return CurrentConfig;
 
-        // Merge settings with precedence: action settings > global defaults
-        return new ExternalConfiguration {
-            // Action-specific settings (REST API)
-            ApiEndpoint = action.ApiEndpoint ?? CurrentConfig.ApiEndpoint,
-            BearerToken = action.BearerToken ?? CurrentConfig.BearerToken,
-
-            // File processing behavior
-            PostFileContents = action.PostFileContents ?? CurrentConfig.PostFileContents,
-            MoveProcessedFiles = action.MoveProcessedFiles ?? CurrentConfig.MoveProcessedFiles,
-            ProcessedFolder = action.ProcessedFolder ?? CurrentConfig.ProcessedFolder,
-            // Array properties: Explicit null check preserves empty array semantics.
-            // - null action value → use global (not specified)
-            // - empty action array [] → use empty (explicitly disable filtering)
-            // - populated action array → use action values
-            // Note: Cannot use ?? operator because empty arrays are non-null objects (Length=0).
-            AllowedExtensions = (action.AllowedExtensions is not null) ? action.AllowedExtensions : CurrentConfig.AllowedExtensions,
-            ExcludePatterns = (action.ExcludePatterns is not null) ? action.ExcludePatterns : CurrentConfig.ExcludePatterns,
-            IncludeSubdirectories = action.IncludeSubdirectories ?? CurrentConfig.IncludeSubdirectories,
-
-            // Timing and retry settings
-            DebounceMilliseconds = action.DebounceMilliseconds ?? CurrentConfig.DebounceMilliseconds,
-            Retries = action.Retries ?? CurrentConfig.Retries,
-            RetryDelayMilliseconds = action.RetryDelayMilliseconds ?? CurrentConfig.RetryDelayMilliseconds,
-            WaitForFileReadyMilliseconds = action.WaitForFileReadyMilliseconds ?? CurrentConfig.WaitForFileReadyMilliseconds,
-
-            // Content size settings
-            MaxContentBytes = action.MaxContentBytes ?? CurrentConfig.MaxContentBytes,
-            StreamingThresholdBytes = action.StreamingThresholdBytes ?? CurrentConfig.StreamingThresholdBytes,
-            DiscardZeroByteFiles = action.DiscardZeroByteFiles ?? CurrentConfig.DiscardZeroByteFiles,
-
-            // Circuit breaker settings
-            EnableCircuitBreaker = action.EnableCircuitBreaker ?? CurrentConfig.EnableCircuitBreaker,
-            CircuitBreakerFailureThreshold = action.CircuitBreakerFailureThreshold ?? CurrentConfig.CircuitBreakerFailureThreshold,
-            CircuitBreakerOpenDurationMilliseconds = action.CircuitBreakerOpenDurationMilliseconds ?? CurrentConfig.CircuitBreakerOpenDurationMilliseconds,
-
-            // Global-only settings (never overridden by actions)
-            Folders = CurrentConfig.Folders,
-            Actions = CurrentConfig.Actions ?? [],
-            WatcherMaxRestartAttempts = CurrentConfig.WatcherMaxRestartAttempts,
-            WatcherRestartDelayMilliseconds = CurrentConfig.WatcherRestartDelayMilliseconds,
-            ChannelCapacity = CurrentConfig.ChannelCapacity,
-            MaxParallelSends = CurrentConfig.MaxParallelSends,
-            FileWatcherInternalBufferSize = CurrentConfig.FileWatcherInternalBufferSize,
-            DiagnosticsUrlPrefix = CurrentConfig.DiagnosticsUrlPrefix,
-            DiagnosticsBearerToken = CurrentConfig.DiagnosticsBearerToken,
-            Logging = CurrentConfig.Logging
-        };
+        // Use central merge helper to produce the effective runtime config
+        return ExternalConfiguration.MergeWithAction(CurrentConfig, action);
     }
 
     /// <summary>
@@ -703,8 +705,14 @@ public partial class Worker : BackgroundService {
                 }
 
                 foreach (string filePath in Directory.EnumerateFiles(folderPath, "*", SearchOption.TopDirectoryOnly)) {
-                    // Use GetConfigForPath to get merged action + global configuration
-                    ExternalConfiguration cfg = GetConfigForPath(filePath);
+                    // Use FileWatcherManager to get merged action + global configuration
+                    ExternalConfiguration cfg;
+                    if (!_fileWatcherManager.TryGetFolderContextForPath(filePath, CurrentConfig, out ExternalConfiguration tmpCfg, out _, out _)) {
+                        cfg = CurrentConfig;
+                    }
+                    else {
+                        cfg = tmpCfg;
+                    }
 
                     // Exclude files in processed folder
                     string[] pathParts = filePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
