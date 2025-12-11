@@ -50,7 +50,7 @@ public class FileWatcherManagerMoveInTests {
             }
         }
 
-        await manager.StartWatchingAsync(new[] { new ExternalConfiguration.WatchedFolderConfig { FolderPath = tempDir } }, config, (folder, e, cfg, act) => handler(manager, e), null, null);
+        await manager.StartWatchingAsync([new ExternalConfiguration.WatchedFolderConfig { FolderPath = tempDir }], config, (folder, e, cfg, act) => handler(manager, e), null, null);
 
         // Create a file outside the watched folder
         await File.WriteAllTextAsync(oldPath, "test");
@@ -148,7 +148,7 @@ public class FileWatcherManagerMoveInTests {
                 }
             }
 
-            await manager.StartWatchingAsync(new[] { new ExternalConfiguration.WatchedFolderConfig { FolderPath = testDir } }, config, (folder, e, cfg, act) => handler(manager, e), null, null);
+            await manager.StartWatchingAsync([new ExternalConfiguration.WatchedFolderConfig { FolderPath = testDir }], config, (folder, e, cfg, act) => handler(manager, e), null, null);
 
             await Task.Delay(100);
 
@@ -202,7 +202,7 @@ public class FileWatcherManagerMoveInTests {
                 }
             }
 
-            await manager.StartWatchingAsync(new[] { new ExternalConfiguration.WatchedFolderConfig { FolderPath = watchedDir } }, config, (folder, e, cfg, act) => handler(manager, e), null, null);
+            await manager.StartWatchingAsync([new ExternalConfiguration.WatchedFolderConfig { FolderPath = watchedDir }], config, (folder, e, cfg, act) => handler(manager, e), null, null);
 
             await Task.Delay(100);
 
@@ -216,7 +216,7 @@ public class FileWatcherManagerMoveInTests {
             Assert.Same(tcs.Task, completed);
 
             FileSystemEventArgs args = await tcs.Task;
-            Assert.True(args.ChangeType == WatcherChangeTypes.Created || args.ChangeType == WatcherChangeTypes.Renamed);
+            Assert.True(args.ChangeType is WatcherChangeTypes.Created or WatcherChangeTypes.Renamed);
             Assert.Equal("moved_test.txt", args.Name);
 
             await manager.StopAllAsync();
@@ -260,7 +260,7 @@ public class FileWatcherManagerMoveInTests {
                 }
             }
 
-            await manager.StartWatchingAsync(new[] { new ExternalConfiguration.WatchedFolderConfig { FolderPath = testDir } }, config, (folder, e, cfg, act) => handler(manager, e), null, null);
+            await manager.StartWatchingAsync([new ExternalConfiguration.WatchedFolderConfig { FolderPath = testDir }], config, (folder, e, cfg, act) => handler(manager, e), null, null);
 
             await Task.Delay(100);
 
@@ -306,7 +306,7 @@ public class FileWatcherManagerMoveInTests {
                 receivedEvents.Add((e.ChangeType, e.Name ?? string.Empty));
             }
 
-            await manager.StartWatchingAsync(new[] { new ExternalConfiguration.WatchedFolderConfig { FolderPath = watchedDir } }, config, (folder, e, cfg, act) => handler(manager, e), null, null);
+            await manager.StartWatchingAsync([new ExternalConfiguration.WatchedFolderConfig { FolderPath = watchedDir }], config, (folder, e, cfg, act) => handler(manager, e), null, null);
             await Task.Delay(100);
 
             string createdFile = Path.Combine(watchedDir, "created.txt");
