@@ -29,24 +29,24 @@ public class SimpleFileLoggerProviderStructuredFieldsTests {
             string ndjsonPath = basePath + ".json";
             string csvPath = basePath + ".csv";
 
-            File.Exists(ndjsonPath).Should().BeTrue();
-            File.Exists(csvPath).Should().BeTrue();
+            Assert.True(File.Exists(ndjsonPath));
+            Assert.True(File.Exists(csvPath));
 
             // Read and inspect ndjson last line
             string[] lines = [.. File.ReadAllLines(ndjsonPath).Where(l => !string.IsNullOrWhiteSpace(l) && l.TrimStart().StartsWith('{') && l.TrimEnd().EndsWith('}'))];
             if (lines.Length == 0) {
                 string[] allLines = File.ReadAllLines(ndjsonPath);
             }
-            lines.Should().NotBeNullOrEmpty();
+            Assert.NotEmpty(lines);
             string last = lines.Last();
 
             using var doc = JsonDocument.Parse(last);
             JsonElement root = doc.RootElement;
-            root.GetProperty("StatusCode").GetInt32().Should().Be(201);
+            Assert.Equal(201, root.GetProperty("StatusCode").GetInt32());
 
             // CSV header contains the StatusCode column
             string csvAll = File.ReadAllText(csvPath);
-            csvAll.Should().Contain("StatusCode");
+            Assert.Contains("StatusCode", csvAll);
         }
         finally {
             try { Directory.Delete(tempDir, recursive: true); } catch { }

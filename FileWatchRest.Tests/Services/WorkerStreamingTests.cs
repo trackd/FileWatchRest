@@ -44,9 +44,9 @@ public class WorkerStreamingTests {
 
             bool result = await worker.SendNotificationAsync(notification, CancellationToken.None);
 
-            result.Should().BeTrue();
-            testResilience.LastRequest.Should().NotBeNull();
-            testResilience.LastRequestContentType.Should().Be<MultipartFormDataContent>();
+            Assert.True(result);
+            Assert.NotNull(testResilience.LastRequest);
+            Assert.Equal(typeof(MultipartFormDataContent), testResilience.LastRequestContentType);
         }
         finally {
             try { if (File.Exists(tempPath)) { File.Delete(tempPath); } } catch { }

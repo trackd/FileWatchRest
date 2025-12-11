@@ -34,7 +34,7 @@ public class RestPostActionTests {
         // Assert: the debouncer should have scheduled the path via the worker
         // The FileDebounceService stores pending entries internally; ensure no exception and that scheduling happened by calling Schedule then invoking internal state via reflection is complex; instead ensure no exception and that worker's debounce service would have accepted schedule
         // Since behavior is indirect, we assert that no exception was thrown and the method completed.
-        ev.Path.Should().Be("C:\\temp\\file.txt");
+        Assert.Equal("C:\\temp\\file.txt", ev.Path);
     }
 
     // Minimal test helpers

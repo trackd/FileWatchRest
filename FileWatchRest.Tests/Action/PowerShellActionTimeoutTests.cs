@@ -13,7 +13,7 @@ public class PowerShellActionTimeoutTests {
 
             await action.ExecuteAsync(fileEvent, CancellationToken.None);
 
-            logger.Entries.Should().Contain(e => e.EventId.Id == 703);
+            Assert.Contains(logger.Entries, e => e.EventId.Id == 703);
         }
         finally {
             try { File.Delete(scriptPath); } catch { }

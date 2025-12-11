@@ -30,7 +30,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.PostFileContents.Should().BeTrue();
+        Assert.True(merged.PostFileContents);
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.MoveProcessedFiles.Should().BeTrue();
+        Assert.True(merged.MoveProcessedFiles);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.ProcessedFolder.Should().Be("processed-folder");
+        Assert.Equal("processed-folder", merged.ProcessedFolder);
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.AllowedExtensions.Should().Equal(".folder");
+        Assert.Equal(new[] { ".folder" }, merged.AllowedExtensions);
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.ExcludePatterns.Should().Equal("*_folder");
+        Assert.Equal(new[] { "*_folder" }, merged.ExcludePatterns);
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.IncludeSubdirectories.Should().BeTrue();
+        Assert.True(merged.IncludeSubdirectories);
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.DebounceMilliseconds.Should().Be(111);
+        Assert.Equal(111, merged.DebounceMilliseconds);
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.Retries.Should().Be(7);
+        Assert.Equal(7, merged.Retries);
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.RetryDelayMilliseconds.Should().Be(444);
+        Assert.Equal(444, merged.RetryDelayMilliseconds);
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.WaitForFileReadyMilliseconds.Should().Be(999);
+        Assert.Equal(999, merged.WaitForFileReadyMilliseconds);
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.MaxContentBytes.Should().Be(123);
+        Assert.Equal(123, merged.MaxContentBytes);
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.StreamingThresholdBytes.Should().Be(20);
+        Assert.Equal(20, merged.StreamingThresholdBytes);
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.DiscardZeroByteFiles.Should().BeTrue();
+        Assert.True(merged.DiscardZeroByteFiles);
     }
 
     [Fact]
@@ -199,7 +199,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.EnableCircuitBreaker.Should().BeTrue();
+        Assert.True(merged.EnableCircuitBreaker);
     }
 
     [Fact]
@@ -212,7 +212,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.CircuitBreakerFailureThreshold.Should().Be(7);
+        Assert.Equal(7, merged.CircuitBreakerFailureThreshold);
     }
 
     [Fact]
@@ -225,7 +225,7 @@ public class OverridesAllSettingsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.CircuitBreakerOpenDurationMilliseconds.Should().Be(777);
+        Assert.Equal(777, merged.CircuitBreakerOpenDurationMilliseconds);
     }
 }
 

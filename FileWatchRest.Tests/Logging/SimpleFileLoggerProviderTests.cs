@@ -26,19 +26,19 @@ public partial class SimpleFileLoggerProviderTests {
 
             // Validate that only files within the retention period remain
             string[] remainingFiles = Directory.GetFiles(tempDir, "*.log");
-            remainingFiles.Length.Should().Be(2);
+            Assert.Equal(2, remainingFiles.Length);
 
             System.Text.RegularExpressions.Regex dateRegex = MyRegex();
             foreach (string file in remainingFiles) {
                 string fn = Path.GetFileName(file) ?? string.Empty;
                 System.Text.RegularExpressions.Match m = dateRegex.Match(fn);
-                m.Success.Should().BeTrue($"Filename '{fn}' should contain a date token in yyyy-MM-dd or yyyy-M-d form");
+                Assert.True(m.Success, $"Filename '{fn}' should contain a date token in yyyy-MM-dd or yyyy-M-d form");
                 string year = m.Groups[1].Value;
                 string month = m.Groups[2].Value.PadLeft(2, '0');
                 string day = m.Groups[3].Value.PadLeft(2, '0');
                 string token = $"{year}-{month}-{day}";
                 var fileDate = DateTime.ParseExact(token, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
-                fileDate.Should().BeOnOrAfter(DateTime.UtcNow.Date.AddDays(-2));
+                Assert.True(fileDate >= DateTime.UtcNow.Date.AddDays(-2));
             }
         }
         finally {

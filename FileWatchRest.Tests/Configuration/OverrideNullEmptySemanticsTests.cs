@@ -34,7 +34,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.AllowedExtensions.Should().Equal(ActionArray);
+        Assert.Equal(ActionArray, merged.AllowedExtensions);
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.AllowedExtensions.Should().Equal(GlobalArray);
+        Assert.Equal(GlobalArray, merged.AllowedExtensions);
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.AllowedExtensions.Should().BeEmpty();
+        Assert.Empty(merged.AllowedExtensions);
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.AllowedExtensions.Should().Equal(ActionArray);
+        Assert.Equal(ActionArray, merged.AllowedExtensions);
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.AllowedExtensions.Should().BeEmpty("action null should fall back to global empty array");
+        Assert.Empty(merged.AllowedExtensions);
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "file.bak");
-        merged.ExcludePatterns.Should().Equal("*.bak");
+        Assert.Equal(new[] { "*.bak" }, merged.ExcludePatterns);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "f.txt");
-        merged.ExcludePatterns.Should().Equal("*_g");
+        Assert.Equal(new[] { "*_g" }, merged.ExcludePatterns);
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "file.tmp");
-        merged.ExcludePatterns.Should().Equal("*.tmp");
+        Assert.Equal(new[] { "*.tmp" }, merged.ExcludePatterns);
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "file.bak");
-        merged.ExcludePatterns.Should().BeEmpty();
+        Assert.Empty(merged.ExcludePatterns);
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "file.bak");
-        merged.ExcludePatterns.Should().BeEmpty("action null should fall back to global empty array");
+        Assert.Empty(merged.ExcludePatterns);
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.ApiEndpoint.Should().Be("https://global/");
+        Assert.Equal("https://global/", merged.ApiEndpoint);
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.ApiEndpoint.Should().BeEmpty();
+        Assert.Equal(string.Empty, merged.ApiEndpoint);
     }
 
     [Fact]
@@ -190,7 +190,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.ProcessedFolder.Should().Be("processed_g");
+        Assert.Equal("processed_g", merged.ProcessedFolder);
     }
 
     [Fact]
@@ -203,7 +203,7 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.ProcessedFolder.Should().BeEmpty();
+        Assert.Empty(merged.ProcessedFolder);
     }
 
     [Fact]
@@ -217,8 +217,8 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.PostFileContents.Should().BeTrue();
-        merged.MoveProcessedFiles.Should().BeTrue();
+        Assert.True(merged.PostFileContents);
+        Assert.True(merged.MoveProcessedFiles);
     }
 
     [Fact]
@@ -236,12 +236,12 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w = CreateWorker(cfg);
         ExternalConfiguration merged = MergeFor(w, folder, "a.txt");
-        merged.DebounceMilliseconds.Should().Be(0);
-        merged.StreamingThresholdBytes.Should().Be(0);
-        merged.MaxContentBytes.Should().Be(0);
-        merged.WaitForFileReadyMilliseconds.Should().Be(100);
-        merged.Retries.Should().Be(3);
-        merged.RetryDelayMilliseconds.Should().Be(0);
+        Assert.Equal(0, merged.DebounceMilliseconds);
+        Assert.Equal(0, merged.StreamingThresholdBytes);
+        Assert.Equal(0, merged.MaxContentBytes);
+        Assert.Equal(100, merged.WaitForFileReadyMilliseconds);
+        Assert.Equal(3, merged.Retries);
+        Assert.Equal(0, merged.RetryDelayMilliseconds);
     }
 
     [Fact]
@@ -255,11 +255,11 @@ public class OverrideNullEmptySemanticsTests {
         };
         Worker w1 = CreateWorker(cfg);
         ExternalConfiguration merged1 = MergeFor(w1, folder, "a.txt");
-        merged1.BearerToken.Should().Be("globaltoken");
+        Assert.Equal("globaltoken", merged1.BearerToken);
 
         cfg.Actions[0].BearerToken = string.Empty;
         Worker w2 = CreateWorker(cfg);
         ExternalConfiguration merged2 = MergeFor(w2, folder, "a.txt");
-        merged2.BearerToken.Should().BeEmpty();
+        Assert.Equal(string.Empty, merged2.BearerToken);
     }
 }

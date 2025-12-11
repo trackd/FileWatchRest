@@ -26,11 +26,11 @@ public class PowershellScriptActionTests {
         await action.ExecuteAsync(fileEvent, CancellationToken.None);
 
         // verify the script wrote the expected path to output_file.json (wait up to 2s)
-        (await WaitForFileAsync(outputPath, 5000)).Should().BeTrue();
+        Assert.True(await WaitForFileAsync(outputPath, 5000));
         var json = JsonDocument.Parse(File.ReadAllText(outputPath));
-        json.RootElement.GetProperty("File").GetString().Should().Be(fileEvent.Path);
+        Assert.Equal(fileEvent.Path, json.RootElement.GetProperty("File").GetString());
         // verify output was logged
-        testLogger.Entries.Any(e => e.EventId.Id == 701 && e.Message.Contains(scriptPath)).Should().BeTrue();
+        Assert.Contains(testLogger.Entries, e => e.EventId.Id == 701 && e.Message.Contains(scriptPath));
         // cleanup
         File.Delete(outputPath);
     }
@@ -60,11 +60,11 @@ public class PowershellScriptActionTests {
         await action.ExecuteAsync(fileEvent, CancellationToken.None);
 
         // verify the script wrote the expected path to output_json.json (wait up to 2s)
-        (await WaitForFileAsync(outputPath, 5000)).Should().BeTrue();
+        Assert.True(await WaitForFileAsync(outputPath, 5000));
         var json = JsonDocument.Parse(File.ReadAllText(outputPath));
-        json.RootElement.GetProperty("Path").GetString().Should().Be(fileEvent.Path);
+        Assert.Equal(fileEvent.Path, json.RootElement.GetProperty("Path").GetString());
         // verify output was logged
-        testLogger.Entries.Any(e => e.EventId.Id == 701 && e.Message.Contains(scriptPath)).Should().BeTrue();
+        Assert.Contains(testLogger.Entries, e => e.EventId.Id == 701 && e.Message.Contains(scriptPath));
         // cleanup
         File.Delete(outputPath);
     }

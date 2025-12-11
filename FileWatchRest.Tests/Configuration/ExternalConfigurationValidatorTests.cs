@@ -28,12 +28,12 @@ public class ExternalConfigurationValidatorTests {
         };
 
         ValidationResult result = ExternalConfigurationValidator.Validate(cfg);
-        result.IsValid.Should().BeFalse();
-        result.Errors.Should().NotBeEmpty();
-        result.Errors.Any(e => e.PropertyName == "Folders").Should().BeTrue();
-        result.Errors.Any(e => e.PropertyName == nameof(cfg.ProcessedFolder)).Should().BeTrue();
-        result.Errors.Any(e => e.PropertyName == nameof(cfg.ChannelCapacity)).Should().BeTrue();
-        result.Errors.Any(e => e.PropertyName == nameof(cfg.ExcludePatterns)).Should().BeTrue();
+        Assert.False(result.IsValid);
+        Assert.NotEmpty(result.Errors);
+        Assert.True(result.Errors.Any(e => e.PropertyName == "Folders"));
+        Assert.True(result.Errors.Any(e => e.PropertyName == nameof(cfg.ProcessedFolder)));
+        Assert.True(result.Errors.Any(e => e.PropertyName == nameof(cfg.ChannelCapacity)));
+        Assert.True(result.Errors.Any(e => e.PropertyName == nameof(cfg.ExcludePatterns)));
     }
 
     [Fact]
@@ -62,6 +62,6 @@ public class ExternalConfigurationValidatorTests {
         };
 
         ValidationResult result = ExternalConfigurationValidator.Validate(cfg);
-        result.IsValid.Should().BeTrue();
+        Assert.True(result.IsValid);
     }
 }

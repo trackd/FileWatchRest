@@ -32,7 +32,7 @@ public class WorkerRetryTests {
             worker.CurrentConfig = new ExternalConfiguration { PostFileContents = true, MaxContentBytes = 10 };
 
             FileNotification notification = await worker.CreateNotificationAsync(temp, CancellationToken.None);
-            notification.Content.Should().BeNull();
+            Assert.Null(notification.Content);
         }
         finally {
             try { File.Delete(temp); } catch { }
@@ -63,8 +63,8 @@ public class WorkerRetryTests {
         var notification = new FileNotification { Path = "test" };
         bool result = await worker.SendNotificationAsync(notification, CancellationToken.None);
 
-        result.Should().BeTrue();
-        handler.AttemptCount.Should().Be(3);
+        Assert.True(result);
+        Assert.Equal(3, handler.AttemptCount);
     }
 
     [Fact]
@@ -95,18 +95,18 @@ public class WorkerRetryTests {
 
         // First call -> fails (handler.AttemptCount++ -> 1)
         bool r1 = await worker.SendNotificationAsync(notification, CancellationToken.None);
-        r1.Should().BeFalse();
-        handler.AttemptCount.Should().Be(1);
+        Assert.False(r1);
+        Assert.Equal(1, handler.AttemptCount);
 
         // Second call -> fails and opens circuit (AttemptCount -> 2)
         bool r2 = await worker.SendNotificationAsync(notification, CancellationToken.None);
-        r2.Should().BeFalse();
-        handler.AttemptCount.Should().Be(2);
+        Assert.False(r2);
+        Assert.Equal(2, handler.AttemptCount);
 
         // Third call -> circuit open -> short-circuit, no more HTTP calls
         bool r3 = await worker.SendNotificationAsync(notification, CancellationToken.None);
-        r3.Should().BeFalse();
-        handler.AttemptCount.Should().Be(2);
+        Assert.False(r3);
+        Assert.Equal(2, handler.AttemptCount);
     }
 
     [Fact]
@@ -135,8 +135,8 @@ public class WorkerRetryTests {
 
         bool result = await worker.SendNotificationAsync(notification, CancellationToken.None);
 
-        result.Should().BeTrue();
-        handler.LastAuthorizationHeader.Should().Be("Bearer test-token-xyz");
+        Assert.True(result);
+        Assert.Equal("Bearer test-token-xyz", handler.LastAuthorizationHeader);
     }
 
     // Lightweight test HTTP handler that returns a sequence of status codes and records attempt count

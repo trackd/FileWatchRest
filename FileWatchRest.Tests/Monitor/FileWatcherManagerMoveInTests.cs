@@ -50,7 +50,7 @@ public class FileWatcherManagerMoveInTests {
             }
         }
 
-        await manager.StartWatchingAsync([tempDir], config, handler, null, null);
+        await manager.StartWatchingAsync(new[] { new ExternalConfiguration.WatchedFolderConfig { FolderPath = tempDir } }, config, (folder, e, cfg, act) => handler(manager, e), null, null);
 
         // Create a file outside the watched folder
         await File.WriteAllTextAsync(oldPath, "test");
@@ -59,10 +59,10 @@ public class FileWatcherManagerMoveInTests {
         File.Move(oldPath, newPath);
 
         Task completed = await Task.WhenAny(tcs.Task, Task.Delay(2000));
-        completed.Should().Be(tcs.Task);
+        Assert.Same(tcs.Task, completed);
         RenamedEventArgs args = await tcs.Task;
-        args.FullPath.Should().Be(newPath);
-        args.OldName.Should().Be(Path.GetFileName(oldPath));
+        Assert.Equal(newPath, args.FullPath);
+        Assert.Equal(Path.GetFileName(oldPath), args.OldName);
 
         Directory.Delete(tempDir, true);
     }
@@ -76,11 +76,10 @@ public class FileWatcherManagerMoveInTests {
             "test.txt",
             "oldtest.txt");
 
-        renamedArgs.ChangeType.Should().Be(WatcherChangeTypes.Renamed);
+        Assert.Equal(WatcherChangeTypes.Renamed, renamedArgs.ChangeType);
 
         WatcherChangeTypes acceptedTypes = WatcherChangeTypes.Created | WatcherChangeTypes.Changed | WatcherChangeTypes.Renamed;
-        (renamedArgs.ChangeType & acceptedTypes).Should().NotBe(0,
-            "Renamed events should be accepted by the file change handler");
+        Assert.NotEqual(0, (int)(renamedArgs.ChangeType & acceptedTypes));
     }
 
     [Fact]
@@ -91,11 +90,10 @@ public class FileWatcherManagerMoveInTests {
             tempDir,
             "newfile.txt");
 
-        createdArgs.ChangeType.Should().Be(WatcherChangeTypes.Created);
+        Assert.Equal(WatcherChangeTypes.Created, createdArgs.ChangeType);
 
         WatcherChangeTypes acceptedTypes = WatcherChangeTypes.Created | WatcherChangeTypes.Changed | WatcherChangeTypes.Renamed;
-        (createdArgs.ChangeType & acceptedTypes).Should().NotBe(0,
-            "Created events should be accepted by the file change handler");
+        Assert.NotEqual(0, (int)(createdArgs.ChangeType & acceptedTypes));
     }
 
     [Fact]
@@ -106,11 +104,10 @@ public class FileWatcherManagerMoveInTests {
             tempDir,
             "modifiedfile.txt");
 
-        changedArgs.ChangeType.Should().Be(WatcherChangeTypes.Changed);
+        Assert.Equal(WatcherChangeTypes.Changed, changedArgs.ChangeType);
 
         WatcherChangeTypes acceptedTypes = WatcherChangeTypes.Created | WatcherChangeTypes.Changed | WatcherChangeTypes.Renamed;
-        (changedArgs.ChangeType & acceptedTypes).Should().NotBe(0,
-            "Changed events should be accepted by the file change handler");
+        Assert.NotEqual(0, (int)(changedArgs.ChangeType & acceptedTypes));
     }
 
     [Fact]
@@ -121,11 +118,10 @@ public class FileWatcherManagerMoveInTests {
             tempDir,
             "deletedfile.txt");
 
-        deletedArgs.ChangeType.Should().Be(WatcherChangeTypes.Deleted);
+        Assert.Equal(WatcherChangeTypes.Deleted, deletedArgs.ChangeType);
 
         WatcherChangeTypes acceptedTypes = WatcherChangeTypes.Created | WatcherChangeTypes.Changed | WatcherChangeTypes.Renamed;
-        (deletedArgs.ChangeType & acceptedTypes).Should().Be(0,
-            "Deleted events should NOT be accepted by the file change handler");
+        Assert.Equal(0, (int)(deletedArgs.ChangeType & acceptedTypes));
     }
 
     [Fact]
@@ -152,7 +148,7 @@ public class FileWatcherManagerMoveInTests {
                 }
             }
 
-            await manager.StartWatchingAsync([testDir], config, handler, null, null);
+            await manager.StartWatchingAsync(new[] { new ExternalConfiguration.WatchedFolderConfig { FolderPath = testDir } }, config, (folder, e, cfg, act) => handler(manager, e), null, null);
 
             await Task.Delay(100);
 
@@ -160,11 +156,11 @@ public class FileWatcherManagerMoveInTests {
             await File.WriteAllTextAsync(testFile, "test content");
 
             Task completed = await Task.WhenAny(tcs.Task, Task.Delay(3000));
-            completed.Should().Be(tcs.Task, "Created event should be raised");
+            Assert.Same(tcs.Task, completed);
 
             FileSystemEventArgs args = await tcs.Task;
-            args.ChangeType.Should().Be(WatcherChangeTypes.Created);
-            args.Name.Should().Be("created_test.txt");
+            Assert.Equal(WatcherChangeTypes.Created, args.ChangeType);
+            Assert.Equal("created_test.txt", args.Name);
 
             await manager.StopAllAsync();
         }
@@ -206,7 +202,7 @@ public class FileWatcherManagerMoveInTests {
                 }
             }
 
-            await manager.StartWatchingAsync([watchedDir], config, handler, null, null);
+            await manager.StartWatchingAsync(new[] { new ExternalConfiguration.WatchedFolderConfig { FolderPath = watchedDir } }, config, (folder, e, cfg, act) => handler(manager, e), null, null);
 
             await Task.Delay(100);
 
@@ -217,13 +213,11 @@ public class FileWatcherManagerMoveInTests {
             File.Move(sourceFile, targetFile);
 
             Task completed = await Task.WhenAny(tcs.Task, Task.Delay(3000));
-            completed.Should().Be(tcs.Task, "Created or Renamed event should be raised when file is moved into watched folder");
+            Assert.Same(tcs.Task, completed);
 
             FileSystemEventArgs args = await tcs.Task;
-            args.ChangeType.Should().Match(ct =>
-                ct == WatcherChangeTypes.Created || ct == WatcherChangeTypes.Renamed,
-                "Move operations trigger either Created or Renamed events");
-            args.Name.Should().Be("moved_test.txt");
+            Assert.True(args.ChangeType == WatcherChangeTypes.Created || args.ChangeType == WatcherChangeTypes.Renamed);
+            Assert.Equal("moved_test.txt", args.Name);
 
             await manager.StopAllAsync();
         }
@@ -266,18 +260,18 @@ public class FileWatcherManagerMoveInTests {
                 }
             }
 
-            await manager.StartWatchingAsync([testDir], config, handler, null, null);
+            await manager.StartWatchingAsync(new[] { new ExternalConfiguration.WatchedFolderConfig { FolderPath = testDir } }, config, (folder, e, cfg, act) => handler(manager, e), null, null);
 
             await Task.Delay(100);
 
             await File.WriteAllTextAsync(testFile, "modified content");
 
             Task completed = await Task.WhenAny(tcs.Task, Task.Delay(3000));
-            completed.Should().Be(tcs.Task, "Changed event should be raised");
+            Assert.Same(tcs.Task, completed);
 
             FileSystemEventArgs args = await tcs.Task;
-            args.ChangeType.Should().Be(WatcherChangeTypes.Changed);
-            args.Name.Should().Be("modify_test.txt");
+            Assert.Equal(WatcherChangeTypes.Changed, args.ChangeType);
+            Assert.Equal("modify_test.txt", args.Name);
 
             await manager.StopAllAsync();
         }
@@ -312,7 +306,7 @@ public class FileWatcherManagerMoveInTests {
                 receivedEvents.Add((e.ChangeType, e.Name ?? string.Empty));
             }
 
-            await manager.StartWatchingAsync([watchedDir], config, handler, null, null);
+            await manager.StartWatchingAsync(new[] { new ExternalConfiguration.WatchedFolderConfig { FolderPath = watchedDir } }, config, (folder, e, cfg, act) => handler(manager, e), null, null);
             await Task.Delay(100);
 
             string createdFile = Path.Combine(watchedDir, "created.txt");
@@ -337,16 +331,12 @@ public class FileWatcherManagerMoveInTests {
 
             await manager.StopAllAsync();
 
-            receivedEvents.Should().Contain(e => e.ChangeType == WatcherChangeTypes.Created && e.Name == "created.txt",
-                "Created event should be captured for directly created files");
-            receivedEvents.Should().Contain(e => e.ChangeType == WatcherChangeTypes.Changed && e.Name == "created.txt",
-                "Changed event should be captured for modified files");
-            receivedEvents.Should().Contain(e =>
+            Assert.Contains(receivedEvents, e => e.ChangeType == WatcherChangeTypes.Created && e.Name == "created.txt");
+            Assert.Contains(receivedEvents, e => e.ChangeType == WatcherChangeTypes.Changed && e.Name == "created.txt");
+            Assert.Contains(receivedEvents, e =>
                 (e.ChangeType == WatcherChangeTypes.Created || e.ChangeType == WatcherChangeTypes.Renamed)
-                && e.Name == "moved.txt",
-                "Created or Renamed event should be captured when file is moved into watched folder");
-            receivedEvents.Should().Contain(e => e.ChangeType == WatcherChangeTypes.Renamed && e.Name == "rename_target.txt",
-                "Renamed event should be captured for files renamed within the watched folder");
+                && e.Name == "moved.txt");
+            Assert.Contains(receivedEvents, e => e.ChangeType == WatcherChangeTypes.Renamed && e.Name == "rename_target.txt");
         }
         finally {
             if (Directory.Exists(sourceDir)) {

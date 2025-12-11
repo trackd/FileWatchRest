@@ -15,8 +15,8 @@ public class ExitCodeLoggingTests {
 
         // Assert: find ExecutableExitCode event with exit code 42
         var exitEvents = logger.Entries.Where(e => e.EventId.Id == 709).ToList();
-        exitEvents.Should().NotBeEmpty("exit-code event should be logged");
-        exitEvents.Any(e => e.Message != null && e.Message.Contains("42")).Should().BeTrue("exit code 42 should appear in message");
+        Assert.NotEmpty(exitEvents);
+        Assert.Contains(exitEvents, e => e.Message != null && e.Message.Contains("42"));
     }
 
     [Fact]
@@ -41,8 +41,8 @@ public class ExitCodeLoggingTests {
 
         // Assert: PowerShellExitCode event should be present and contain 7
         var exitEvents = logger.Entries.Where(e => e.EventId.Id == 708).ToList();
-        exitEvents.Should().NotBeEmpty("PowerShell exit-code event should be logged");
-        exitEvents.Any(e => e.Message != null && e.Message.Contains('7')).Should().BeTrue("exit code 7 should appear in message");
+        Assert.NotEmpty(exitEvents);
+        Assert.Contains(exitEvents, e => e.Message != null && e.Message.Contains('7'));
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public class ExitCodeLoggingTests {
 
         // Assert: PowerShellExitCode event should be present and contain 9
         var exitEvents = logger.Entries.Where(e => e.EventId.Id == 708).ToList();
-        exitEvents.Should().NotBeEmpty("PowerShell exit-code event should be logged when resolver not provided");
-        exitEvents.Any(e => e.Message != null && e.Message.Contains('9')).Should().BeTrue("exit code 9 should appear in message");
+        Assert.NotEmpty(exitEvents);
+        Assert.Contains(exitEvents, e => e.Message != null && e.Message.Contains('9'));
     }
 }

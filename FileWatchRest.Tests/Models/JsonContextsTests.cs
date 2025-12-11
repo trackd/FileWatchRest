@@ -13,33 +13,34 @@ public class JsonContextsTests {
             TotalEvents = 42
         };
 
-        diag.ActiveWatchers.Should().Contain(["one", "two"]);
-        diag.RestartAttempts["w"].Should().Be(3);
-        diag.EventCount.Should().Be(7);
-        diag.TotalEvents.Should().Be(42);
+        Assert.Contains("one", diag.ActiveWatchers);
+        Assert.Contains("two", diag.ActiveWatchers);
+        Assert.Equal(3, diag.RestartAttempts["w"]);
+        Assert.Equal(7, diag.EventCount);
+        Assert.Equal(42, diag.TotalEvents);
     }
 
     [Fact]
     public void HealthStatus_DefaultsAndSerialization() {
         var h = new HealthStatus();
-        h.Status.Should().Be("healthy");
+        Assert.Equal("healthy", h.Status);
         h.Timestamp = DateTimeOffset.UtcNow;
 
         string json = JsonSerializer.Serialize(h);
-        json.Should().Contain("healthy");
+        Assert.Contains("healthy", json);
         HealthStatus round = JsonSerializer.Deserialize<HealthStatus>(json)!;
-        round.Status.Should().Be("healthy");
+        Assert.Equal("healthy", round.Status);
     }
 
     [Fact]
     public void ErrorResponse_DefaultsAndSerialization() {
         var e = new ErrorResponse();
-        e.Error.Should().BeEmpty();
-        e.AvailableEndpoints.Should().NotBeNull();
+        Assert.Empty(e.Error);
+        Assert.NotNull(e.AvailableEndpoints);
 
         string json = JsonSerializer.Serialize(e);
-        json.Should().Contain("AvailableEndpoints");
+        Assert.Contains("AvailableEndpoints", json);
         ErrorResponse round = JsonSerializer.Deserialize<ErrorResponse>(json)!;
-        round.AvailableEndpoints.Should().NotBeNull();
+        Assert.NotNull(round.AvailableEndpoints);
     }
 }

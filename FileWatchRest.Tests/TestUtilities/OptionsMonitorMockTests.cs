@@ -16,17 +16,17 @@ public class OptionsMonitorMockTests {
 
         monitor.SetCurrentValue(new Dummy { X = 5 });
 
-        called.Should().Be(1);
-        observed.Should().NotBeNull();
-        observed!.X.Should().Be(5);
-        name.Should().Be(string.Empty);
+        Assert.Equal(1, called);
+        Assert.NotNull(observed);
+        Assert.Equal(5, observed!.X);
+        Assert.Equal(string.Empty, name);
 
         disp.Dispose();
 
         monitor.SetCurrentValue(new Dummy { X = 6 });
 
-        called.Should().Be(2);
-        observed!.X.Should().Be(6);
+        Assert.Equal(2, called);
+        Assert.Equal(6, observed!.X);
     }
 
     [Fact]
@@ -40,10 +40,10 @@ public class OptionsMonitorMockTests {
 
         monitor.SetCurrentValue(new Dummy { X = 7 });
 
-        called.Should().Be(1);
-        observed.Should().NotBeNull();
-        observed!.X.Should().Be(7);
-        name.Should().Be(string.Empty);
+        Assert.Equal(1, called);
+        Assert.NotNull(observed);
+        Assert.Equal(7, observed!.X);
+        Assert.Equal(string.Empty, name);
 
         disp.Dispose();
     }

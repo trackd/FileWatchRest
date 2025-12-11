@@ -16,8 +16,8 @@ public class ExternalConfigurationValidatorEdgeCasesTests {
         };
 
         ValidationResult r = ExternalConfigurationValidator.Validate(config);
-        r.IsValid.Should().BeFalse();
-        r.Errors.Should().ContainSingle(e => e.PropertyName.Contains("ApiEndpoint"));
+        Assert.False(r.IsValid);
+        Assert.Single(r.Errors, e => e.PropertyName.Contains("ApiEndpoint"));
     }
 
     [Theory]
@@ -35,8 +35,8 @@ public class ExternalConfigurationValidatorEdgeCasesTests {
         };
 
         ValidationResult r = ExternalConfigurationValidator.Validate(config);
-        r.IsValid.Should().BeFalse();
-        r.Errors.Should().ContainSingle(e => e.PropertyName.Contains("DebounceMilliseconds"));
+        Assert.False(r.IsValid);
+        Assert.Single(r.Errors, e => e.PropertyName.Contains("DebounceMilliseconds"));
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class ExternalConfigurationValidatorEdgeCasesTests {
         };
 
         ValidationResult r = ExternalConfigurationValidator.Validate(config);
-        r.IsValid.Should().BeFalse();
-        r.Errors.Should().Contain(e => e.PropertyName.Contains("AllowedExtensions"));
+        Assert.False(r.IsValid);
+        Assert.Contains(r.Errors, e => e.PropertyName.Contains("AllowedExtensions"));
     }
 }

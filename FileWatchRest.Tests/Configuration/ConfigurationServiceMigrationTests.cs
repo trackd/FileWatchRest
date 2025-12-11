@@ -26,20 +26,20 @@ public class ConfigurationServiceMigrationTests : IDisposable {
         await File.WriteAllTextAsync(path, oldJson);
 
         string before = await File.ReadAllTextAsync(path);
-        before.Should().Contain("\"LogLevel\": \"Debug\"");
+        Assert.Contains("\"LogLevel\": \"Debug\"", before);
 
         ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
         ILogger<ExternalConfigurationOptionsMonitor> monitorLogger = loggerFactory.CreateLogger<ExternalConfigurationOptionsMonitor>();
         var monitor = new ExternalConfigurationOptionsMonitor(path, monitorLogger, loggerFactory);
         ExternalConfiguration cfg = monitor.CurrentValue;
 
-        cfg.Should().NotBeNull();
-        cfg.Logging.Should().NotBeNull();
+        Assert.NotNull(cfg);
+        Assert.NotNull(cfg.Logging);
 
         string auditPath = Path.Combine(dir, "migration-audit.log");
-        File.Exists(auditPath).Should().BeTrue();
+        Assert.True(File.Exists(auditPath));
         string auditContent = await File.ReadAllTextAsync(auditPath);
-        auditContent.Should().Contain("TopLevel LogLevel -> Logging.LogLevel");
+        Assert.Contains("TopLevel LogLevel -> Logging.LogLevel", auditContent);
 
         try { File.Delete(path); Directory.Delete(dir); } catch { }
     }
@@ -60,20 +60,20 @@ public class ConfigurationServiceMigrationTests : IDisposable {
         await File.WriteAllTextAsync(path, oldJson);
 
         string before2 = await File.ReadAllTextAsync(path);
-        before2.Should().Contain("\"MinimumLevel\": \"Warning\"");
+        Assert.Contains("\"MinimumLevel\": \"Warning\"", before2);
 
         ILoggerFactory loggerFactory = LoggerFactory.Create(_ => { });
         ILogger<ExternalConfigurationOptionsMonitor> monitorLogger = loggerFactory.CreateLogger<ExternalConfigurationOptionsMonitor>();
         var monitor = new ExternalConfigurationOptionsMonitor(path, monitorLogger, loggerFactory);
         ExternalConfiguration cfg = monitor.CurrentValue;
 
-        cfg.Should().NotBeNull();
-        cfg.Logging.Should().NotBeNull();
+        Assert.NotNull(cfg);
+        Assert.NotNull(cfg.Logging);
 
         string auditPath2 = Path.Combine(dir, "migration-audit.log");
-        File.Exists(auditPath2).Should().BeTrue();
+        Assert.True(File.Exists(auditPath2));
         string auditContent2 = await File.ReadAllTextAsync(auditPath2);
-        auditContent2.Should().Contain("Logging.MinimumLevel -> Logging.LogLevel");
+        Assert.Contains("Logging.MinimumLevel -> Logging.LogLevel", auditContent2);
 
         try { File.Delete(path); Directory.Delete(dir); } catch { }
     }

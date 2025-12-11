@@ -51,7 +51,7 @@ public class PowerShellEndToEndTests : IDisposable {
 
         // Configure actions from loaded configuration and start watching
         manager.ConfigureFolderActions(monitor.CurrentValue.Folders, monitor.CurrentValue, WorkerFactory.CreateWorker(optionsMonitor: monitor));
-        await manager.StartWatchingAsync(monitor.CurrentValue.Folders, monitor.CurrentValue, (s, e) => { }, null, null);
+        await manager.StartWatchingAsync(monitor.CurrentValue.Folders, monitor.CurrentValue, (folder, e, cfg, act) => { }, null, null);
 
         // Create a file in the watched directory to trigger the action
         string testFile = Path.Combine(_watchDir, "test.txt");

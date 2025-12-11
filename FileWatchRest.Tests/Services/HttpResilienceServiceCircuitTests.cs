@@ -33,16 +33,16 @@ public class HttpResilienceServiceCircuitTests {
 
         // First two calls should attempt HTTP and fail
         ResilienceResult r1 = await svc.SendWithRetriesAsync(reqFactory, client, "ep", cfg, CancellationToken.None);
-        r1.Success.Should().BeFalse();
+        Assert.False(r1.Success);
         ResilienceResult r2 = await svc.SendWithRetriesAsync(reqFactory, client, "ep", cfg, CancellationToken.None);
-        r2.Success.Should().BeFalse();
+        Assert.False(r2.Success);
 
         // At this point the circuit should have opened; subsequent call should be short-circuited without new HTTP calls
         ResilienceResult r3 = await svc.SendWithRetriesAsync(reqFactory, client, "ep", cfg, CancellationToken.None);
-        r3.ShortCircuited.Should().BeTrue();
+        Assert.True(r3.ShortCircuited);
 
         // Ensure handler was called exactly twice (first two attempts)
-        callCount.Should().Be(2);
+        Assert.Equal(2, callCount);
     }
 
     private sealed class DelegatingHandlerStub(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> fn) : HttpMessageHandler {

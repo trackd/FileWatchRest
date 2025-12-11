@@ -12,7 +12,7 @@ public class CsvHeaderTests {
 
             using var sr = new StreamReader(temp);
             string? first = sr.ReadLine();
-            first.Should().Be(expected);
+            Assert.Equal(expected, first);
         }
         finally {
             try { if (File.Exists(temp)) { File.Delete(temp); } } catch { }

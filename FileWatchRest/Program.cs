@@ -1,117 +1,19 @@
-// Resolve external config path. Priority:
-// 1) Command-line: --config <path> or -c <path> or first positional arg
-// 2) Environment variable FILEWATCHREST_CONFIG
-// 3) Default under CommonApplicationData
-string? explicitConfig = null;
-if (args?.Length > 0) {
-    for (int i = 0; i < args.Length; i++) {
-        if (string.Equals(args[i], "--config", StringComparison.OrdinalIgnoreCase) || string.Equals(args[i], "-c", StringComparison.OrdinalIgnoreCase)) {
-            if (i + 1 < args.Length && !string.IsNullOrWhiteSpace(args[i + 1])) {
-                explicitConfig = args[i + 1];
-                break;
-            }
-        }
-    }
+using FileWatchRest;
+using FileWatchRest.Configuration;
+using FileWatchRest.Logging;
+using FileWatchRest.Models;
+using FileWatchRest.Services;
+using Microsoft.Extensions.Hosting.WindowsServices;
+using System.Threading.Channels;
 
-    if (explicitConfig is null && args.Length > 0 && File.Exists(args[0])) {
-        explicitConfig = args[0];
-    }
-}
-
-if (string.IsNullOrWhiteSpace(explicitConfig)) {
-    string? envCfg = Environment.GetEnvironmentVariable("FILEWATCHREST_CONFIG");
-    if (!string.IsNullOrWhiteSpace(envCfg)) {
-        explicitConfig = envCfg;
-    }
-}
-
-// Compute program data/service dir once only if we need the default path or for logging
-string programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-
-/// Todo: change logdir logic, now it is hardcoded to serviceDir, it should follow config dir.
-/// Todo: we should move much of these local functions to helper methods instead, clean up program.cs.
-
-string serviceDir = Path.Combine(programData, "FileWatchRest");
-string externalConfigPath = explicitConfig ?? Path.Combine(serviceDir, "FileWatchRest.json");
-
-// Prefer resolving file locations (logs, etc.) relative to the directory containing the external config
-// when a config path is provided. Fall back to the CommonApplicationData service dir when no config path exists.
-string configDir = Path.GetDirectoryName(externalConfigPath) ?? serviceDir;
-
-SimpleFileLoggerOptions? loggingOptions = null;
-if (File.Exists(externalConfigPath)) {
-    try {
-        string json = File.ReadAllText(externalConfigPath);
-        ExternalConfiguration? extConfig = JsonSerializer.Deserialize(json, MyJsonContext.Default.ExternalConfiguration);
-        if (extConfig is not null) {
-            loggingOptions = extConfig.Logging;
-        }
-    }
-    catch {
-        // Ignore - will use defaults below
-    }
-}
-
-loggingOptions ??= new SimpleFileLoggerOptions {
-    LogType = LogType.Csv,
-    FilePathPattern = "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}",
-    LogLevel = LogLevel.Information,
-    RetainedDays = 14
-};
-
-// Ensure logs directory exists and resolve file paths relative to CommonApplicationData when not absolute
 try {
-    Directory.CreateDirectory(serviceDir);
-    string ResolvePath(string p) {
-        return string.IsNullOrWhiteSpace(p)
-            ? Path.Combine(serviceDir, "logs", "FileWatchRest.log")
-            : Path.IsPathRooted(p) ? p : Path.Combine(serviceDir, p.Replace('/', Path.DirectorySeparatorChar));
-    }
-
-    string baseResolved = ResolvePath(string.Format(CultureInfo.InvariantCulture, loggingOptions.FilePathPattern, DateTime.Now));
-    string CsvLogFilePath(string basePath) {
-        return Path.HasExtension(basePath) ? basePath : basePath + ".csv";
-    }
-    string JsonLogFilePath(string basePath) {
-        return Path.HasExtension(basePath) ? basePath : basePath + ".json";
-    }
-
-    string csvLogFile = CsvLogFilePath(baseResolved);
-    string jsonLogFile = JsonLogFilePath(baseResolved);
-
-    // Ensure CSV header if CSV sink will be used
-    if (loggingOptions.LogType is LogType.Csv or LogType.Both) {
-        try {
-            if (!File.Exists(csvLogFile)) {
-                File.WriteAllText(csvLogFile, "Timestamp,Level,Message,Category,Exception,StatusCode\n");
-            }
-        }
-        catch { }
-    }
-
-    // Build simple file logger options (AOT-safe): map unified options
-    // Resolve FilePathPattern to an absolute path using the configuration directory as base when pattern is relative.
-    string resolvedPattern = loggingOptions.FilePathPattern ?? "logs/FileWatchRest_{0:yyyyMMdd_HHmmss}";
-    if (!Path.IsPathRooted(resolvedPattern)) {
-        resolvedPattern = Path.Combine(configDir, resolvedPattern.Replace('/', Path.DirectorySeparatorChar));
-    }
-
-    var fileLoggerOptions = new SimpleFileLoggerOptions {
-        LogType = loggingOptions.LogType,
-        FilePathPattern = resolvedPattern,
-        // RetainedFileCountLimit is obsolete and removed. Use RetainedDays for retention policy.
-        LogLevel = loggingOptions.LogLevel
-    };
+    // Resolve configuration paths
+    string configPath = ConfigurationPathResolver.ResolveConfigurationPath(args);
+    string baseDir = ConfigurationPathResolver.GetBaseDirectory(configPath);
 
     IHost host = new HostBuilder()
         .UseWindowsService()
-        .ConfigureLogging((context, logging) => {
-            logging.ClearProviders();
-            // Set minimum level to Trace so CSV logger receives all messages
-            logging.SetMinimumLevel(LogLevel.Trace);
-            // Use custom provider only; it will emit both file and concise console output.
-            logging.AddProvider(new SimpleFileLoggerProvider(fileLoggerOptions));
-        })
+        .ConfigureFileLogging(configPath, baseDir)
         .ConfigureServices((context, services) => {
             // Register a typed HttpClient for the file API.
             // Retry logic is implemented in the Worker (so the HTTP client is a plain client here).
@@ -165,9 +67,21 @@ try {
         })
         .Build();
 
+    // Log startup configuration
+    ILogger<Program> logger = host.Services.GetRequiredService<ILogger<Program>>();
+    IOptionsMonitor<ExternalConfiguration> configMonitor = host.Services.GetRequiredService<IOptionsMonitor<ExternalConfiguration>>();
+    ExternalConfiguration config = configMonitor.CurrentValue ?? new ExternalConfiguration();
+    LoggingConfigurationHelper.LogStartupConfiguration(logger, config, configPath);
+
     host.Run();
 }
 catch (Exception ex) {
-    try { Console.Error.WriteLine($"Host terminated unexpectedly: {ex}"); } catch { }
+    try {
+        Console.Error.WriteLine($"Host terminated unexpectedly: {ex}");
+    }
+    catch {
+        // Ignored
+    }
+
     throw;
 }

@@ -7,15 +7,15 @@ public class DiagnosticsServiceTests {
         var svc = new DiagnosticsService(NullLogger<DiagnosticsService>.Instance, opts);
 
         svc.RecordFileEvent("/tmp/a.txt", true, 200);
-        svc.IsFilePosted("/tmp/a.txt").Should().BeTrue();
+        Assert.True(svc.IsFilePosted("/tmp/a.txt"));
 
         svc.RecordFileEvent("/tmp/b.txt", false, 500);
-        svc.IsFilePosted("/tmp/b.txt").Should().BeFalse();
+        Assert.False(svc.IsFilePosted("/tmp/b.txt"));
 
         IReadOnlyCollection<FileEventRecord> events = svc.GetRecentEvents(10);
-        events.Should().NotBeEmpty();
+        Assert.NotEmpty(events);
         string[] expected = ["/tmp/a.txt", "/tmp/b.txt"];
-        events.Select(e => e.Path).Should().Contain(expected);
+        Assert.All(expected, e => Assert.Contains(e, events.Select(evt => evt.Path)));
     }
 
     [Fact]
@@ -24,15 +24,15 @@ public class DiagnosticsServiceTests {
         var svc = new DiagnosticsService(NullLogger<DiagnosticsService>.Instance, opts);
 
         svc.RegisterWatcher("c:\\watch");
-        svc.GetActiveWatchers().Should().Contain("c:\\watch");
+        Assert.Contains("c:\\watch", svc.GetActiveWatchers());
 
         svc.UnregisterWatcher("c:\\watch");
-        svc.GetActiveWatchers().Should().NotContain("c:\\watch");
+        Assert.DoesNotContain("c:\\watch", svc.GetActiveWatchers());
 
         int v1 = svc.IncrementRestart("c\\r");
-        v1.Should().Be(1);
+        Assert.Equal(1, v1);
         int v2 = svc.IncrementRestart("c\\r");
-        v2.Should().Be(2);
+        Assert.Equal(2, v2);
     }
 
     private sealed class TestOptionsMonitor : IOptionsMonitor<ExternalConfiguration> {

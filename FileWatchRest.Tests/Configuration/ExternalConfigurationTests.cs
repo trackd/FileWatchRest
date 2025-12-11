@@ -9,8 +9,8 @@ public class ExternalConfigurationTests {
 
         var errors = cfg.ValidateFolders().ToList();
 
-        errors.Should().ContainSingle(e => e.Contains("FolderPath is required"));
-        errors.Should().Contain(e => e.Contains("ActionName is required") || e.Contains("references action 'missing'"));
+        Assert.Single(errors, e => e.Contains("FolderPath is required"));
+        Assert.Contains(errors, e => e.Contains("ActionName is required") || e.Contains("references action 'missing'"));
     }
 
     [Fact]
@@ -19,17 +19,18 @@ public class ExternalConfigurationTests {
 
         // No actions defined
         var errs = cfg.ValidateActions().ToList();
-        errs.Should().ContainSingle().Which.Should().Contain("At least one Action");
+        var singleErr = Assert.Single(errs);
+        Assert.Contains("At least one Action", singleErr);
 
         cfg.Actions.Add(new ExternalConfiguration.ActionConfig { Name = "", ActionType = ExternalConfiguration.FolderActionType.RestPost });
         cfg.Actions.Add(new ExternalConfiguration.ActionConfig { Name = "A1", ActionType = ExternalConfiguration.FolderActionType.RestPost, ApiEndpoint = "" });
         cfg.Actions.Add(new ExternalConfiguration.ActionConfig { Name = "A1", ActionType = ExternalConfiguration.FolderActionType.PowerShellScript, ScriptPath = "" });
 
         var errs2 = cfg.ValidateActions().ToList();
-        errs2.Should().Contain(e => e.Contains("Action Name is required"));
-        errs2.Should().Contain(e => e.Contains("Duplicate action name 'A1'"));
-        errs2.Should().Contain(e => e.Contains("ApiEndpoint is required for REST action 'A1'"));
-        errs2.Should().Contain(e => e.Contains("ScriptPath is required for PowerShell action 'A1'"));
+        Assert.Contains(errs2, e => e.Contains("Action Name is required"));
+        Assert.Contains(errs2, e => e.Contains("Duplicate action name 'A1'"));
+        Assert.Contains(errs2, e => e.Contains("ApiEndpoint is required for REST action 'A1'"));
+        Assert.Contains(errs2, e => e.Contains("ScriptPath is required for PowerShell action 'A1'"));
     }
 
     [Fact]
@@ -37,7 +38,7 @@ public class ExternalConfigurationTests {
         var a = new ExternalConfiguration.WatchedFolderConfig { FolderPath = "C:\\Temp", ActionName = "DoWork" };
         var b = new ExternalConfiguration.WatchedFolderConfig { FolderPath = "c:\\temp", ActionName = "dowork" };
 
-        a.Equals(b).Should().BeTrue();
-        a.GetHashCode().Should().Be(b.GetHashCode());
+        Assert.True(a.Equals(b));
+        Assert.Equal(b.GetHashCode(), a.GetHashCode());
     }
 }

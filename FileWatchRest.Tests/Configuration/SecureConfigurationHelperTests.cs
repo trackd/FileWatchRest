@@ -2,24 +2,24 @@ namespace FileWatchRest.Tests.Configuration;
 
 public class SecureConfigurationHelperTests {
     [Fact]
-    public void IsTokenEncrypted_ReturnsFalse_ForPlainText() => SecureConfigurationHelper.IsTokenEncrypted("plain").Should().BeFalse();
+    public void IsTokenEncrypted_ReturnsFalse_ForPlainText() => Assert.False(SecureConfigurationHelper.IsTokenEncrypted("plain"));
 
     [Fact]
-    public void IsTokenEncrypted_ReturnsTrue_ForEncryptedPrefix() => SecureConfigurationHelper.IsTokenEncrypted("enc:abcd").Should().BeTrue();
+    public void IsTokenEncrypted_ReturnsTrue_ForEncryptedPrefix() => Assert.True(SecureConfigurationHelper.IsTokenEncrypted("enc:abcd"));
 
     [Fact]
     public void EnsureTokenIsEncrypted_Encrypts_WhenPlainText_OnWindows() {
         if (!OperatingSystem.IsWindows()) {
             // Running on non-windows in CI, just assert it returns input
-            SecureConfigurationHelper.EnsureTokenIsEncrypted("plain").Should().Be("plain");
+            Assert.Equal("plain", SecureConfigurationHelper.EnsureTokenIsEncrypted("plain"));
             return;
         }
 
         string input = "my-secret-token";
         string ensured = SecureConfigurationHelper.EnsureTokenIsEncrypted(input);
-        ensured.Should().StartWith("enc:");
+        Assert.StartsWith("enc:", ensured);
         string decrypted = SecureConfigurationHelper.DecryptBearerToken(ensured);
-        decrypted.Should().Be(input);
+        Assert.Equal(input, decrypted);
     }
 
     [Fact]
@@ -29,6 +29,7 @@ public class SecureConfigurationHelperTests {
         }
 
         System.Action act = () => SecureConfigurationHelper.DecryptBearerToken("not-enc");
-        act.Should().Throw<InvalidOperationException>().WithMessage("Token does not have the expected encryption prefix");
+        var ex = Assert.Throws<InvalidOperationException>(act);
+        Assert.Equal("Token does not have the expected encryption prefix", ex.Message);
     }
 }

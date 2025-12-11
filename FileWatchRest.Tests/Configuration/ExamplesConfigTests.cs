@@ -17,7 +17,7 @@ public class ExamplesConfigTests {
             if (string.IsNullOrEmpty(parent)) break;
             probe = parent;
         }
-        examplesDir.Should().NotBeNull("examples directory must exist for this test");
+        Assert.NotNull(examplesDir);
 
         var logger = new Mock<ILogger<ExternalConfigurationOptionsMonitor>>();
         using var loggerFactory = new LoggerFactory();
@@ -40,11 +40,11 @@ public class ExamplesConfigTests {
                     try { Console.WriteLine(JsonSerializer.Serialize(cfg, MyJsonContext.Default.ExternalConfiguration)); } catch { }
                     try { Console.WriteLine(File.ReadAllText(file)); } catch { }
                 }
-                validation.IsValid.Should().BeTrue($"Config from {Path.GetFileName(file)} must validate. Errors: {string.Join(';', validation.Errors.Select(e => e.ErrorMessage))}");
+                Assert.True(validation.IsValid, $"Config from {Path.GetFileName(file)} must validate. Errors: {string.Join(';', validation.Errors.Select(e => e.ErrorMessage))}");
 
                 // Ensure folders reference actions that exist
                 foreach (ExternalConfiguration.WatchedFolderConfig f in cfg.Folders) {
-                    cfg.Actions.Any(a => string.Equals(a.Name, f.ActionName, StringComparison.OrdinalIgnoreCase)).Should().BeTrue($"Folder {f.FolderPath} references missing action {f.ActionName}");
+                    Assert.True(cfg.Actions.Any(a => string.Equals(a.Name, f.ActionName, StringComparison.OrdinalIgnoreCase)), $"Folder {f.FolderPath} references missing action {f.ActionName}");
                 }
             }
             finally {

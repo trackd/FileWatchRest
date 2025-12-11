@@ -97,11 +97,64 @@ public partial class Worker : BackgroundService {
     }
 
     private Task StartWatchingFoldersAsync(List<ExternalConfiguration.WatchedFolderConfig> folders) {
-        return _fileWatcherManager.StartWatchingAsync(folders, CurrentConfig, OnFileChanged, OnWatcherError, folderPath => {
+        return _fileWatcherManager.StartWatchingAsync(folders, CurrentConfig, OnFileChangedWithContext, OnWatcherError, folderPath => {
             // Exceeded restart attempts -> stop application
             LoggerDelegates.WatcherFailedStopping(_logger, folderPath, null);
             _lifetime.StopApplication();
         });
+    }
+
+    private void OnFileChangedWithContext(string folder, FileSystemEventArgs e, ExternalConfiguration? cfg, IFolderAction? action) {
+        // Accept Created, Changed, and Renamed events
+        if (e.ChangeType is not (WatcherChangeTypes.Created or WatcherChangeTypes.Changed or WatcherChangeTypes.Renamed)) {
+            return;
+        }
+
+        string path = e.FullPath;
+        if (e is RenamedEventArgs renamed) {
+            LoggerDelegates.FileRenamed(_logger, renamed.OldFullPath ?? string.Empty, path, null);
+        }
+
+        // If manager supplied a merged config, use it; otherwise fall back to existing lookup
+        ExternalConfiguration effectiveCfg = cfg ?? GetConfigForPath(path);
+
+        // Exclude files in the processed folder to prevent infinite loops
+        string[] pathParts = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (pathParts.Any(part => part.Equals(effectiveCfg.ProcessedFolder, StringComparison.OrdinalIgnoreCase))) {
+            LoggerDelegates.IgnoredFileInProcessed(_logger, path, null);
+            return;
+        }
+
+        // Apply file extension filtering
+        if (effectiveCfg.AllowedExtensions is { Length: > 0 }) {
+            string extension = Path.GetExtension(path);
+            if (!effectiveCfg.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)) {
+                return;
+            }
+        }
+
+        // Apply exclude pattern filtering
+        if (effectiveCfg.ExcludePatterns is { Length: > 0 }) {
+            string fileName = Path.GetFileName(path);
+            LoggerDelegates.CheckingExcludePatterns(_logger, fileName, effectiveCfg.ExcludePatterns.Length, null);
+            string? matchedPattern = FileSystemPatternMatcher.TryMatchAny(fileName, effectiveCfg.ExcludePatterns);
+            if (matchedPattern is not null) {
+                LoggerDelegates.ExcludedByPattern(_logger, fileName, matchedPattern, null);
+                return;
+            }
+
+            if (_logger.IsEnabled(LogLevel.Debug)) {
+                LoggerDelegates.NotExcludedPatterns(_logger, fileName, string.Join(", ", effectiveCfg.ExcludePatterns), null);
+            }
+        }
+
+        if (_diagnostics.IsFilePosted(path)) {
+            LoggerDelegates.SkippingAlreadyPosted(_logger, path, null);
+            return;
+        }
+
+        _debounceService.Schedule(path);
+        LoggerDelegates.QueuedDebouncedTrace(_logger, path, null);
     }
 
     private void OnFileChanged(object? sender, FileSystemEventArgs e) {
@@ -119,13 +172,9 @@ public partial class Worker : BackgroundService {
         }
 
         // Determine effective config for this path (merge action with global defaults)
-        ExternalConfiguration cfg;
-        if (!_fileWatcherManager.TryGetFolderContextForPath(path, CurrentConfig, out ExternalConfiguration tmpCfg, out _, out _)) {
-            cfg = CurrentConfig;
-        }
-        else {
-            cfg = tmpCfg;
-        }
+        ExternalConfiguration cfg = !_fileWatcherManager.TryGetFolderContextForPath(path, CurrentConfig, out ExternalConfiguration tmpCfg, out _, out _)
+            ? GetConfigForPath(path)
+            : tmpCfg;
 
         // Exclude files in the processed folder to prevent infinite loops
         string[] pathParts = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -181,13 +230,9 @@ public partial class Worker : BackgroundService {
     /// <param name="path"></param>
     internal void EnqueueFileFromAction(string path) {
         // Determine effective config for this path (merge action with global defaults)
-        ExternalConfiguration cfg;
-        if (!_fileWatcherManager.TryGetFolderContextForPath(path, CurrentConfig, out ExternalConfiguration tmpCfg, out _, out _)) {
-            cfg = CurrentConfig;
-        }
-        else {
-            cfg = tmpCfg;
-        }
+        ExternalConfiguration cfg = !_fileWatcherManager.TryGetFolderContextForPath(path, CurrentConfig, out ExternalConfiguration tmpCfg, out _, out _)
+            ? GetConfigForPath(path)
+            : tmpCfg;
 
         // Exclude files in the processed folder to prevent infinite loops
         string[] pathParts = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -657,7 +702,17 @@ public partial class Worker : BackgroundService {
     /// </summary>
     /// <param name="path"></param>
     internal ExternalConfiguration GetConfigForPath(string path) {
-        // Find the most specific matching folder (longest path) that is a prefix of the file path
+        // Prefer manager-provided merged config (avoids repeated Path.GetFullPath and duplicate logic)
+        try {
+            if (_fileWatcherManager.TryGetFolderContextForPath(path, CurrentConfig, out ExternalConfiguration merged, out _, out _)) {
+                return merged;
+            }
+        }
+        catch {
+            // Fall back to local merge logic on any unexpected error
+        }
+
+        // Fallback: find the most specific matching folder (longest path) that is a prefix of the file path
         ExternalConfiguration.WatchedFolderConfig? folder = null;
         string normalized = Path.GetFullPath(path);
 
@@ -706,13 +761,9 @@ public partial class Worker : BackgroundService {
 
                 foreach (string filePath in Directory.EnumerateFiles(folderPath, "*", SearchOption.TopDirectoryOnly)) {
                     // Use FileWatcherManager to get merged action + global configuration
-                    ExternalConfiguration cfg;
-                    if (!_fileWatcherManager.TryGetFolderContextForPath(filePath, CurrentConfig, out ExternalConfiguration tmpCfg, out _, out _)) {
-                        cfg = CurrentConfig;
-                    }
-                    else {
-                        cfg = tmpCfg;
-                    }
+                    ExternalConfiguration cfg = !_fileWatcherManager.TryGetFolderContextForPath(filePath, CurrentConfig, out ExternalConfiguration tmpCfg, out _, out _)
+                        ? GetConfigForPath(filePath)
+                        : tmpCfg;
 
                     // Exclude files in processed folder
                     string[] pathParts = filePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);

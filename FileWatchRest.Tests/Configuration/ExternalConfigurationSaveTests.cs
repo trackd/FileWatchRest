@@ -12,7 +12,7 @@ public class ExternalConfigurationSaveTests {
             string? parent = Path.GetDirectoryName(probe);
             probe = parent;
         }
-        examplesDir.Should().NotBeNull("examples directory must exist for this test");
+        Assert.NotNull(examplesDir);
 
         // Pick the first example JSON file and copy to temp path so the monitor may write/migrate safely during the test
         string exampleFile = Directory.GetFiles(examplesDir!, "*.json").OrderBy(n => n).First();
@@ -29,10 +29,10 @@ public class ExternalConfigurationSaveTests {
         using var origDoc = JsonDocument.Parse(File.ReadAllText(exampleFile));
         using var savedDoc = JsonDocument.Parse(File.ReadAllText(tempConfig));
 
-        origDoc.RootElement.TryGetProperty("Actions", out JsonElement origActions).Should().BeTrue();
-        savedDoc.RootElement.TryGetProperty("Actions", out JsonElement savedActions).Should().BeTrue();
+        Assert.True(origDoc.RootElement.TryGetProperty("Actions", out JsonElement origActions));
+        Assert.True(savedDoc.RootElement.TryGetProperty("Actions", out JsonElement savedActions));
 
-        origActions.GetArrayLength().Should().Be(savedActions.GetArrayLength());
+        Assert.Equal(savedActions.GetArrayLength(), origActions.GetArrayLength());
 
         for (int i = 0; i < origActions.GetArrayLength(); i++) {
             JsonElement o = origActions[i];
@@ -47,13 +47,13 @@ public class ExternalConfigurationSaveTests {
 
             // Ensure every property present in original exists with same raw text in saved
             foreach (KeyValuePair<string, string> kv in origMap) {
-                savedMap.Should().ContainKey(kv.Key);
-                savedMap[kv.Key].Should().Be(kv.Value, because: $"property '{kv.Key}' should round-trip unchanged for action index {i}");
+                Assert.True(savedMap.ContainsKey(kv.Key));
+                Assert.Equal(kv.Value, savedMap[kv.Key]);
             }
 
             // Also ensure saved does not introduce unexpected properties that were not present in original
             foreach (KeyValuePair<string, string> kv in savedMap) {
-                origMap.ContainsKey(kv.Key).Should().BeTrue(because: $"saved action must not introduce new property '{kv.Key}' for action index {i}");
+                Assert.True(origMap.ContainsKey(kv.Key));
             }
         }
     }

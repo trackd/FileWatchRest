@@ -23,6 +23,6 @@ public class FileSenderServiceTests {
         var task = (Task)exec.Invoke(svc, [CancellationToken.None])!;
         await task;
 
-        processed.Should().Be(2);
+        Assert.Equal(2, processed);
     }
 }

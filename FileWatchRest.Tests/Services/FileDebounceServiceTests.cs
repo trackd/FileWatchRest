@@ -21,9 +21,9 @@ public class FileDebounceServiceTests {
         Task<string> readTask = channel.Reader.ReadAsync(cts.Token).AsTask();
         Task completed = await Task.WhenAny(readTask, Task.Delay(1500, cts.Token));
 
-        completed.Should().Be(readTask, "the debounce service should write scheduled files to the output channel");
+        Assert.Same(readTask, completed);
         string result = await readTask;
-        result.Should().Be("file1.txt");
+        Assert.Equal("file1.txt", result);
 
         // Stop service
         await svc.StopAsync(CancellationToken.None);

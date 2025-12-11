@@ -18,11 +18,11 @@ public class PowerShellExecutableResolverTests {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             await action.ExecuteAsync(fileEvent, cts.Token);
 
-            File.Exists(outputPath).Should().BeTrue();
+            Assert.True(File.Exists(outputPath));
             string versionText = File.ReadAllText(outputPath).Trim();
-            Version.TryParse(versionText, out Version? ver).Should().BeTrue();
-            ver!.Major.Should().Be(5);
-            ver.Minor.Should().Be(1);
+            Assert.True(Version.TryParse(versionText, out Version? ver));
+            Assert.Equal(5, ver!.Major);
+            Assert.Equal(1, ver.Minor);
         }
         finally { try { File.Delete(scriptPath); } catch { } try { File.Delete(outputPath); } catch { } }
     }
@@ -40,7 +40,7 @@ public class PowerShellExecutableResolverTests {
 
             var action = new PowerShellScriptAction(scriptPath, null, null, null, false, resolver);
             ProcessStartInfo psi = action.CreateProcessStartInfo(fileEvent);
-            psi.FileName.Should().Be("C:\\custom\\pwsh.exe");
+            Assert.Equal("C:\\custom\\pwsh.exe", psi.FileName);
         }
         finally { try { File.Delete(scriptPath); } catch { } }
     }

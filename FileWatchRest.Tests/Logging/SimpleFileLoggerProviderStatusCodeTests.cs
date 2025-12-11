@@ -24,8 +24,8 @@ public class SimpleFileLoggerProviderStatusCodeTests {
 
             string allText = File.ReadAllText(csvPath);
 
-            allText.Should().Contain("StatusCode");
-            allText.Should().Contain(",201");
+            Assert.Contains("StatusCode", allText);
+            Assert.Contains(",201", allText);
         }
         finally {
             try { Directory.Delete(tempDir, recursive: true); } catch { }

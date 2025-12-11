@@ -45,8 +45,8 @@ public class OverridesIntegrationFilteringTests {
         InvokeOnFileChanged(worker, allowed);
         InvokeOnFileChanged(worker, blocked);
 
-        debounce.Scheduled.Should().Contain(allowed);
-        debounce.Scheduled.Should().NotContain(blocked);
+        Assert.Contains(allowed, debounce.Scheduled);
+        Assert.DoesNotContain(blocked, debounce.Scheduled);
     }
 
     [Fact]
@@ -70,8 +70,8 @@ public class OverridesIntegrationFilteringTests {
         InvokeOnFileChanged(worker, excluded);
         InvokeOnFileChanged(worker, included);
 
-        debounce.Scheduled.Should().Contain(included);
-        debounce.Scheduled.Should().NotContain(excluded);
+        Assert.Contains(included, debounce.Scheduled);
+        Assert.DoesNotContain(excluded, debounce.Scheduled);
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class OverridesIntegrationFilteringTests {
         InvokeOnFileChanged(worker, processedFile);
         InvokeOnFileChanged(worker, normalFile);
 
-        debounce.Scheduled.Should().Contain(normalFile);
-        debounce.Scheduled.Should().NotContain(processedFile);
+        Assert.Contains(normalFile, debounce.Scheduled);
+        Assert.DoesNotContain(processedFile, debounce.Scheduled);
     }
 }

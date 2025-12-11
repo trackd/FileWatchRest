@@ -8,12 +8,12 @@ public class ExternalConfigurationTests {
     public void Constructor_SetsDefaultValues() {
         var config = new ExternalConfiguration();
 
-        config.Folders.Should().BeEmpty();
-        config.ApiEndpoint.Should().BeNull();
-        config.BearerToken.Should().BeNull();
-        config.PostFileContents.Should().BeFalse();
-        config.MoveProcessedFiles.Should().BeFalse();
-        config.ProcessedFolder.Should().Be("processed");
+        Assert.Empty(config.Folders);
+        Assert.Null(config.ApiEndpoint);
+        Assert.Null(config.BearerToken);
+        Assert.False(config.PostFileContents);
+        Assert.False(config.MoveProcessedFiles);
+        Assert.Equal("processed", config.ProcessedFolder);
     }
 
     [Fact]
@@ -28,9 +28,9 @@ public class ExternalConfigurationTests {
         config.ApiEndpoint = "https://api.example.com/webhook";
         config.PostFileContents = true;
 
-        config.Folders.Should().BeEquivalentTo(expectedFolders);
-        config.ApiEndpoint.Should().Be("https://api.example.com/webhook");
-        config.PostFileContents.Should().BeTrue();
+        Assert.Equivalent(expectedFolders, config.Folders);
+        Assert.Equal("https://api.example.com/webhook", config.ApiEndpoint);
+        Assert.True(config.PostFileContents);
     }
 
     [Theory]
@@ -39,7 +39,7 @@ public class ExternalConfigurationTests {
     [InlineData(1000)]
     public void DebounceMilliseconds_AcceptsValues(int debounceMs) {
         var config = new ExternalConfiguration { DebounceMilliseconds = debounceMs };
-        config.DebounceMilliseconds.Should().Be(debounceMs);
+        Assert.Equal(debounceMs, config.DebounceMilliseconds);
     }
 }
 
@@ -47,7 +47,7 @@ public class FileNotificationTests {
     [Fact]
     public void Constructor_CreatesEmptyFileNotification() {
         var notification = new FileNotification();
-        notification.Path.Should().BeEmpty();
+        Assert.Empty(notification.Path);
     }
 
     [Fact]
@@ -56,8 +56,8 @@ public class FileNotificationTests {
         string json = JsonSerializer.Serialize(notification);
         FileNotification? deserialized = JsonSerializer.Deserialize<FileNotification>(json);
 
-        deserialized.Should().NotBeNull();
-        deserialized!.Path.Should().Be(@"C:\temp\example.txt");
+        Assert.NotNull(deserialized);
+        Assert.Equal(@"C:\temp\example.txt", deserialized!.Path);
     }
 }
 
@@ -75,15 +75,15 @@ public class DiagnosticsServiceTests : IDisposable {
 
     [Fact]
     public void Constructor_InitializesCorrectly() {
-        _diagnosticsService.Should().NotBeNull();
-        _diagnosticsService.GetActiveWatchers().Should().BeEmpty();
+        Assert.NotNull(_diagnosticsService);
+        Assert.Empty(_diagnosticsService.GetActiveWatchers());
     }
 
     [Fact]
     public void RegisterWatcher_AddsWatcherToActiveList() {
         string folderPath = @"C:\temp\test";
         _diagnosticsService.RegisterWatcher(folderPath);
-        _diagnosticsService.GetActiveWatchers().Should().Contain(folderPath);
+        Assert.Contains(folderPath, _diagnosticsService.GetActiveWatchers());
     }
 
     public void Dispose() {

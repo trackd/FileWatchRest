@@ -31,7 +31,7 @@ public class WorkerHelperTests {
         var cfg = new ExternalConfiguration { WaitForFileReadyMilliseconds = 500, PostFileContents = false };
 
         bool ready = await Worker.WaitForFileReadyAsync(tmp, cfg, CancellationToken.None);
-        ready.Should().BeTrue();
+        Assert.True(ready);
 
         try { File.Delete(tmp); } catch { }
     }
@@ -43,7 +43,7 @@ public class WorkerHelperTests {
         var cfg = new ExternalConfiguration { WaitForFileReadyMilliseconds = 200, PostFileContents = true, DiscardZeroByteFiles = true };
 
         bool ready = await Worker.WaitForFileReadyAsync(tmp, cfg, CancellationToken.None);
-        ready.Should().BeFalse();
+        Assert.False(ready);
 
         try { File.Delete(tmp); } catch { }
     }
@@ -61,7 +61,7 @@ public class WorkerHelperTests {
 
         var cfg = new ExternalConfiguration { PostFileContents = true, MaxContentBytes = 1024 * 10 };
         FileNotification notification = await worker.CreateNotificationAsync(tmp, cfg, CancellationToken.None);
-        notification.Content.Should().Contain("content123");
+        Assert.Contains("content123", notification.Content);
 
         try { File.Delete(tmp); } catch { }
     }
@@ -70,9 +70,9 @@ public class WorkerHelperTests {
     public void ShouldUseStreamingUpload_behaviour() {
         var cfg = new ExternalConfiguration { PostFileContents = true, StreamingThresholdBytes = 100, MaxContentBytes = 1024 };
         var n = new FileNotification { Path = "a", FileSize = 200 };
-        Worker.ShouldUseStreamingUpload(n, cfg).Should().BeTrue();
+        Assert.True(Worker.ShouldUseStreamingUpload(n, cfg));
 
         n.FileSize = 50;
-        Worker.ShouldUseStreamingUpload(n, cfg).Should().BeFalse();
+        Assert.False(Worker.ShouldUseStreamingUpload(n, cfg));
     }
 }

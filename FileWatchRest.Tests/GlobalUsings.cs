@@ -20,7 +20,6 @@ global using FileWatchRest.Services;
 global using FileWatchRest.Tests.Helpers;
 global using FileWatchRest.Tests.Mocks;
 global using FileWatchRest.Tests.TestUtilities;
-global using FluentAssertions;
 global using Microsoft.Extensions.Hosting;
 global using Microsoft.Extensions.Logging;
 global using Microsoft.Extensions.Logging.Abstractions;

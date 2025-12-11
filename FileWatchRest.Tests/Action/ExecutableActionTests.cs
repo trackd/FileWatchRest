@@ -9,11 +9,11 @@ public class ExecutableActionTests {
 
         ProcessStartInfo psi = action.CreateProcessStartInfo(fileEvent);
 
-        psi.Should().NotBeNull();
-        psi.FileName.Should().Be("cmd");
-        psi.ArgumentList.Should().Contain("-p");
-        psi.ArgumentList.Should().Contain("C:\\temp\\file.txt");
-        psi.ArgumentList.Should().Contain(arg => arg.Contains("\"Path\"") && arg.Contains("file.txt"));
+        Assert.NotNull(psi);
+        Assert.Equal("cmd", psi.FileName);
+        Assert.Contains("-p", psi.ArgumentList);
+        Assert.Contains("C:\\temp\\file.txt", psi.ArgumentList);
+        Assert.Contains(psi.ArgumentList, arg => arg.Contains("\"Path\"") && arg.Contains("file.txt"));
         return;
     }
 }

@@ -39,8 +39,8 @@ public class OverridesBehaviorTests {
         ExternalConfiguration mergedAllowed = InvokeGetConfig(worker, allowed);
         ExternalConfiguration mergedRejected = InvokeGetConfig(worker, rejected);
 
-        mergedAllowed.AllowedExtensions.Should().Equal(".txt");
-        mergedRejected.AllowedExtensions.Should().Equal(".txt");
+        Assert.Equal(new[] { ".txt" }, mergedAllowed.AllowedExtensions);
+        Assert.Equal(new[] { ".txt" }, mergedRejected.AllowedExtensions);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public class OverridesBehaviorTests {
 
         string path = Path.Combine(folder, "whatever.any");
         ExternalConfiguration merged = InvokeGetConfig(worker, path);
-        merged.AllowedExtensions.Should().Equal(".csv");
+        Assert.Equal(new[] { ".csv" }, merged.AllowedExtensions);
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public class OverridesBehaviorTests {
         Worker worker = CreateWorker(cfg);
 
         ExternalConfiguration merged = InvokeGetConfig(worker, Path.Combine(folder, "file.any"));
-        merged.AllowedExtensions.Should().BeEmpty();
+        Assert.Empty(merged.AllowedExtensions);
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public class OverridesBehaviorTests {
         Worker worker = CreateWorker(cfg);
 
         ExternalConfiguration merged = InvokeGetConfig(worker, Path.Combine(folder, "file.any"));
-        merged.ExcludePatterns.Should().Equal("*.bak");
+        Assert.Equal(new[] { "*.bak" }, merged.ExcludePatterns);
     }
 
     private static ExternalConfiguration InvokeGetConfig(Worker worker, string path) {

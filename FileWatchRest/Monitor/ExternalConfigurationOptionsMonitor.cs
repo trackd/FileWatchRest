@@ -16,7 +16,7 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
     private readonly ILogger<ExternalConfigurationOptionsMonitor> _logger;
     private readonly string _configPath;
     private readonly Lock _sync = new();
-    private readonly List<Action<ExternalConfiguration, string?>> _listeners = [];
+    private readonly List<(Guid id, Action<ExternalConfiguration, string?> cb)> _listeners = [];
     private readonly FileSystemWatcher? _watcher;
     private readonly FileSystemEventHandler? _changedHandler;
     private readonly FileSystemEventHandler? _createdHandler;
@@ -132,7 +132,7 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
 
     private void NotifyListeners(ExternalConfiguration newConfig) {
         Action<ExternalConfiguration, string?>[] copy;
-        lock (_sync) { copy = [.. _listeners]; }
+        lock (_sync) { copy = [.. _listeners.Select(t => t.cb)]; }
         foreach (Action<ExternalConfiguration, string?> cb in copy) {
             try { cb(newConfig, null); }
             catch (Exception ex) { LoggerDelegates.ListenerThrew(_logger, ex); }
@@ -144,8 +144,9 @@ public partial class ExternalConfigurationOptionsMonitor : IOptionsMonitor<Exter
     public ExternalConfiguration Get(string? name) => CurrentValue;
 
     public IDisposable OnChange(Action<ExternalConfiguration, string?> listener) {
-        lock (_sync) { _listeners.Add(listener); }
-        return new DisposableAction(() => { lock (_sync) { _listeners.Remove(listener); } });
+        var id = Guid.NewGuid();
+        lock (_sync) { _listeners.Add((id, listener)); }
+        return new DisposableAction(() => { lock (_sync) { int idx = _listeners.FindIndex(t => t.id == id); if (idx >= 0) _listeners.RemoveAt(idx); } });
     }
 
     private sealed class DisposableAction(Action action) : IDisposable {

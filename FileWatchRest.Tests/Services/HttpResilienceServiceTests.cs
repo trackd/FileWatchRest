@@ -21,10 +21,10 @@ public class HttpResilienceServiceTests {
 
         ResilienceResult result = await svc.SendWithRetriesAsync(ct => Task.FromResult(new HttpRequestMessage(HttpMethod.Get, "http://example/")), client, "ep", new ExternalConfiguration { Retries = 0, RetryDelayMilliseconds = 100 }, CancellationToken.None);
 
-        result.Success.Should().BeTrue();
-        result.Attempts.Should().Be(1);
-        result.LastStatusCode.Should().Be(200);
-        result.ShortCircuited.Should().BeFalse();
+        Assert.True(result.Success);
+        Assert.Equal(1, result.Attempts);
+        Assert.Equal(200, result.LastStatusCode);
+        Assert.False(result.ShortCircuited);
     }
 
     [Fact]
@@ -42,12 +42,12 @@ public class HttpResilienceServiceTests {
         var svc = new HttpResilienceService(logger, diag);
 
         ResilienceResult first = await svc.SendWithRetriesAsync(ct => Task.FromResult(new HttpRequestMessage(HttpMethod.Get, "http://example/")), client, "ep2", cfg, CancellationToken.None);
-        first.Success.Should().BeFalse();
-        first.LastStatusCode.Should().Be(500);
+        Assert.False(first.Success);
+        Assert.Equal(500, first.LastStatusCode);
 
         ResilienceResult second = await svc.SendWithRetriesAsync(ct => Task.FromResult(new HttpRequestMessage(HttpMethod.Get, "http://example/")), client, "ep2", cfg, CancellationToken.None);
-        second.ShortCircuited.Should().BeTrue();
-        second.Attempts.Should().Be(0);
+        Assert.True(second.ShortCircuited);
+        Assert.Equal(0, second.Attempts);
     }
 
     private sealed class FakeHandler(HttpResponseMessage resp) : HttpMessageHandler {

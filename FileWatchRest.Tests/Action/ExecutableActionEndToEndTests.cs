@@ -11,7 +11,7 @@ public class ExecutableActionEndToEndTests {
 
         await action.ExecuteAsync(fileEvent, CancellationToken.None);
 
-        logger.Entries.Should().Contain(e => e.EventId.Id == 705 && e.Message.Contains(fileEvent.Path));
+        Assert.Contains(logger.Entries, e => e.EventId.Id == 705 && e.Message.Contains(fileEvent.Path));
     }
 
     [Fact]
@@ -24,7 +24,7 @@ public class ExecutableActionEndToEndTests {
 
         await action.ExecuteAsync(fileEvent, CancellationToken.None);
 
-        logger.Entries.Should().NotContain(e => e.EventId.Id == 705);
+        Assert.DoesNotContain(logger.Entries, e => e.EventId.Id == 705);
     }
 
     [Fact]
@@ -38,6 +38,6 @@ public class ExecutableActionEndToEndTests {
 
         await action.ExecuteAsync(fileEvent, CancellationToken.None);
 
-        logger.Entries.Should().Contain(e => e.EventId.Id == 704);
+        Assert.Contains(logger.Entries, e => e.EventId.Id == 704);
     }
 }

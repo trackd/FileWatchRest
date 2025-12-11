@@ -9,12 +9,12 @@ public class ExecutableActionIgnoreOutputTests {
 
         var actionWithOutput = new ExecutableAction("cmd", args, executionTimeoutMilliseconds: 1000, ignoreOutput: false);
         ProcessStartInfo psiWith = actionWithOutput.CreateProcessStartInfo(fileEvent);
-        psiWith.RedirectStandardOutput.Should().BeTrue();
-        psiWith.RedirectStandardError.Should().BeTrue();
+        Assert.True(psiWith.RedirectStandardOutput);
+        Assert.True(psiWith.RedirectStandardError);
 
         var actionIgnore = new ExecutableAction("cmd", args, executionTimeoutMilliseconds: 1000, ignoreOutput: true);
         ProcessStartInfo psiIgnore = actionIgnore.CreateProcessStartInfo(fileEvent);
-        psiIgnore.RedirectStandardOutput.Should().BeFalse();
-        psiIgnore.RedirectStandardError.Should().BeFalse();
+        Assert.False(psiIgnore.RedirectStandardOutput);
+        Assert.False(psiIgnore.RedirectStandardError);
     }
 }

@@ -278,4 +278,22 @@ internal static class LoggerDelegates {
     public static readonly Action<ILogger, string, Exception?> FailedToConfigureLogging =
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(428, nameof(FailedToConfigureLogging)), "Failed to configure logging: {ErrorMessage}");
 
+    /// <summary>
+    /// Startup logging delegates (900–999)
+    /// </summary>
+    internal static readonly Action<ILogger, string, Exception?> StartupVersion =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(901, "StartupVersion"), "=== FileWatchRest {Version} Startup ===");
+
+    internal static readonly Action<ILogger, string, Exception?> StartupConfigPath =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(902, "StartupConfigPath"), "Configuration: {Path}");
+
+    internal static readonly Action<ILogger, Exception?> StartupComplete =
+        LoggerMessage.Define(LogLevel.Information, new EventId(903, "StartupComplete"), "=== Startup Complete ===");
+
+    /// <summary>
+    /// Generic startup logging delegate for config inspection: (label, value)
+    /// </summary>
+    internal static readonly Action<ILogger, string, string, Exception?> StartupConfigValue =
+        LoggerMessage.Define<string, string>(LogLevel.Information, new EventId(904, "StartupConfigValue"), "{ConfigLabel}: {ConfigValue}");
+
 }
