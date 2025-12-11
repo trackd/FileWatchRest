@@ -11,9 +11,9 @@
         <AssemblyCompany>FileWatchRest</AssemblyCompany>
         <AssemblyProduct>FileWatchRest</AssemblyProduct>
         <AssemblyCopyright>Copyright FileWatchRest 2025</AssemblyCopyright>
-        <Version>0.4.1</Version>
-        <AssemblyVersion>0.4.1</AssemblyVersion>
-        <FileVersion>0.4.1.0</FileVersion>
+        <Version>0.4.3</Version>
+        <AssemblyVersion>0.4.3</AssemblyVersion>
+        <FileVersion>0.4.3.0</FileVersion>
         <!-- Repository information -->
         <RepositoryUrl>https://github.com/trackd/FileWatchRest</RepositoryUrl>
         <RepositoryType>git</RepositoryType>

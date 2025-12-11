@@ -349,44 +349,6 @@ if ($CreateZip) {
 
 }
 
-# Create source ZIP (include source folder + README)
-if ($CreateZip) {
-    Write-Host "`n==> Creating Source ZIP..." -ForegroundColor Cyan
-    $sourceZipPath = Join-Path $OutputDir "FileWatchRest-source-$Version.zip"
-
-    # Build list of items to include
-    $items = @()
-    if (Test-Path 'FileWatchRest') { $items += 'FileWatchRest' }
-    if (Test-Path 'README.md') { $items += 'README.md' }
-
-    if ($items.Count -eq 0) {
-        Write-Warning 'No source files found to include in source ZIP. Skipping source archive.'
-    }
-    else {
-        if (Test-Path $sourceZipPath) { Remove-Item $sourceZipPath -Force }
-        # Build list of files under FileWatchRest excluding bin/ and obj/ paths, then compress from repo root so relative paths are preserved
-        $repoRoot = (Resolve-Path -Path $Parent).Path
-        Push-Location $repoRoot
-        try {
-            $files = Get-ChildItem -Path (Join-Path $repoRoot 'FileWatchRest') -Exclude 'bin', 'obj'
-            if ($files.Count -gt 0) {
-                Compress-Archive -Path $files -DestinationPath $sourceZipPath -CompressionLevel Optimal
-                if (Test-Path $sourceZipPath) {
-                    $sz = (Get-Item $sourceZipPath).Length / 1MB
-                    Write-Host "Created Source ZIP: $sourceZipPath ($([math]::Round($sz,2)) MB)" -ForegroundColor Green
-                }
-            }
-            else {
-                Write-Warning 'No files found to include in source ZIP after excluding build folders.'
-            }
-        }
-        catch {
-            Write-Warning "Failed to create source ZIP: $_"
-        }
-        finally { Pop-Location }
-    }
-}
-
 Write-Host "`n==> Packaging completed!" -ForegroundColor Green
 
 
