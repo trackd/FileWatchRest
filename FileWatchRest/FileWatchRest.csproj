@@ -35,7 +35,7 @@
     </PropertyGroup>
     <ItemGroup
         Condition="'$(Configuration)'=='Debug' Or '$(Configuration)'=='Release' Or '$(CI)'=='true'">
-        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.*" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="all" />
     </ItemGroup>
     <PropertyGroup Condition="'$(PublishAot)' == 'true'">
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
