@@ -24,36 +24,37 @@ try { dotnet --version | Out-Null } catch { Fail 'dotnet is not available on PAT
 $Parent = Split-Path $PSScriptRoot -Parent
 
 $EnablePublish = $env:CI -or $PublishToGitHub
+$RequestedVersion = $Version
+if ($RequestedVersion -and $BumpVersion) {
+    Fail 'Use either -Version to set an explicit release version or -BumpVersion to increment the project version, not both.'
+}
 $csprojPath = Join-Path $Parent 'FileWatchRest' 'FileWatchRest.csproj'
 if (-not (Test-Path $csprojPath)) { Fail "Cannot find project file: $csprojPath" }
 
-# By default, let release perform the bump when requested so we only call bump-version once.
 [xml]$csproj = Get-Content $csprojPath
-$didBump = $false
-# If user requested a version bump or publishing is enabled, run the bump script (which will update the csproj)
-if ($BumpVersion) {
-    $bumpScript = Join-Path $PSScriptRoot 'bump-version.ps1'
-    if (Test-Path $bumpScript) {
-        Write-Host 'Bumping version in csproj (release)...' -ForegroundColor Gray
-        & $bumpScript
-        # Re-read the csproj after bump
-        [xml]$csproj = Get-Content $csprojPath
-        $didBump = $true
-    }
-    else { Write-Warning "bump-version.ps1 not found at: $bumpScript" }
+$bumpScript = Join-Path $PSScriptRoot 'bump-version.ps1'
+if (-not (Test-Path $bumpScript)) { Fail "bump-version.ps1 not found at: $bumpScript" }
+
+if ($RequestedVersion) {
+    Write-Host "Writing requested release version to csproj: $RequestedVersion" -ForegroundColor Gray
+    & $bumpScript $RequestedVersion | Out-Null
+    [xml]$csproj = Get-Content $csprojPath
+}
+elseif ($BumpVersion) {
+    Write-Host 'Bumping patch version in csproj (release)...' -ForegroundColor Gray
+    & $bumpScript | Out-Null
+    [xml]$csproj = Get-Content $csprojPath
 }
 
-if (-not $Version) {
-    $Version = $csproj.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1
-    if (-not $Version) { Fail 'Version not found in csproj; please set <Version> in the project or pass -Version.' }
-}
+$ResolvedVersion = $csproj.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1
+if (-not $ResolvedVersion) { Fail 'Version not found in csproj; please set <Version> in the project or pass -Version.' }
 
-Write-Host "Using version: $Version, $($Version.Gettype().FullName)" -ForegroundColor Cyan
+Write-Host "Using version: $ResolvedVersion" -ForegroundColor Cyan
 # Ensure artifacts folder exists
 $artifactsDir = Join-Path $Parent 'artifacts'
 if (-not (Test-Path $artifactsDir)) { New-Item -ItemType Directory -Path $artifactsDir | Out-Null }
 
-Write-Host "Releasing version: $Version" -ForegroundColor Cyan
+Write-Host "Releasing version: $ResolvedVersion" -ForegroundColor Cyan
 
 # Build (build.ps1 will run tests by default; it auto-enables coverage in CI)
 Write-Host '==> Building (restore/build/test/publish)' -ForegroundColor Cyan
@@ -63,11 +64,10 @@ $build = Get-Item (Join-Path $PSScriptRoot 'build.ps1')
 $buildArgs = @{
     'ProjectPath' = 'FileWatchRest'
     'OutputDir' = 'output'
+    'Version' = $ResolvedVersion
 }
-if (-not $didBump -and ($BumpVersion -or $EnablePublish)) { $buildArgs['VersionBump'] = $true }
-if ($Version) { $buildArgs['Version'] = $Version }
 
-Write-Host "Invoking build with Version=$Version" -ForegroundColor Gray
+Write-Host "Invoking build with Version=$ResolvedVersion" -ForegroundColor Gray
 # Ensure build runs from repository root so publish output ('./publish') lands at repo root
 Push-Location $Parent
 try {
@@ -85,7 +85,7 @@ $package = Get-Item (Join-Path $PSScriptRoot 'package.ps1')
 $packsplat = @{
     'PublishDir' = Join-Path $Parent 'publish'
     'OutputDir' = Join-Path $Parent 'artifacts'
-    'Version' = $Version
+    'Version' = $ResolvedVersion
 }
 & $package @packsplat
 
@@ -94,7 +94,7 @@ Write-Host '==> Generating release notes' -ForegroundColor Cyan
 # Release notes
 $releaseNotes = Get-Item (Join-Path $PSScriptRoot 'release-notes.ps1')
 $rlssplat = @{
-    'Version' = $Version
+    'Version' = $ResolvedVersion
     'OutputPath' = Join-Path $Parent 'artifacts' 'release_notes.md'
     'Repository' = 'trackd/FileWatchRest'
     'CommitSha' = (git rev-parse HEAD)
@@ -113,7 +113,7 @@ if ($EnablePublish) {
             Write-Warning 'gh CLI not found; skipping GitHub release upload. Install from https://cli.github.com/'
         }
         else {
-            $tag = "v$Version"
+            $tag = "v$ResolvedVersion"
             $notesPath = Join-Path "$parent/artifacts" 'release_notes.md'
             $notes = ''
             if (Test-Path $notesPath) { $notes = Get-Content $notesPath -Raw }

@@ -1,24 +1,29 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <LangVersion>13.0</LangVersion>
+        <LangVersion>14.0</LangVersion>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <UserSecretsId>dotnet-FileWatchRest-80d6e3cd-c132-403f-8533-841c30ef72d8</UserSecretsId>
         <!-- Assembly and package information -->
         <AssemblyTitle>FileWatchRest</AssemblyTitle>
         <AssemblyDescription>Modern file watching service with REST API integration</AssemblyDescription>
-        <AssemblyCompany>FileWatchRest</AssemblyCompany>
+        <AssemblyCompany>trackd</AssemblyCompany>
         <AssemblyProduct>FileWatchRest</AssemblyProduct>
-        <AssemblyCopyright>Copyright FileWatchRest 2025</AssemblyCopyright>
-        <Version>0.4.3</Version>
-        <AssemblyVersion>0.4.3</AssemblyVersion>
-        <FileVersion>0.4.3.0</FileVersion>
+        <AssemblyCopyright>Copyright FileWatchRest 2026</AssemblyCopyright>
+        <Version>0.5.0</Version>
+        <AssemblyVersion>0.5.0</AssemblyVersion>
+        <FileVersion>0.5.0.0</FileVersion>
         <!-- Repository information -->
         <RepositoryUrl>https://github.com/trackd/FileWatchRest</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <RepositoryBranch>main</RepositoryBranch>
         <ApplicationGuid>D179783F-B2AC-4B8C-9CA3-FCDB61236484</ApplicationGuid>
+    </PropertyGroup>
+    <PropertyGroup>
+        <EnableNETAnalyzers>true</EnableNETAnalyzers>
+        <CodeAnalysisTreatWarningsAsErrors>true</CodeAnalysisTreatWarningsAsErrors>
+        <AnalysisLevel>latest-Recommended</AnalysisLevel>
     </PropertyGroup>
     <!-- Enable SourceLink and portable PDBs for Debug, Release, or CI builds.
         Producing portable PDBs with SourceLink in CI/Release improves post-mortem
@@ -46,16 +51,7 @@
         <TrimMode>link</TrimMode>
         <DefineConstants>$(DefineConstants);PUBLISH_AOT</DefineConstants>
     </PropertyGroup>
-    <PropertyGroup>
-        <EnableNETAnalyzers>true</EnableNETAnalyzers>
-        <CodeAnalysisTreatWarningsAsErrors>true</CodeAnalysisTreatWarningsAsErrors>
-        <AnalysisLevel>latest-Recommended</AnalysisLevel>
-    </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.*">
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-            <PrivateAssets>all</PrivateAssets>
-        </PackageReference>
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.*" />
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.*" />
         <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.*" />

@@ -7,11 +7,68 @@ public class DiagnosticsServiceUnitTests {
         var cfgMon = new FileWatchRest.TestUtilities.OptionsMonitorMock<ExternalConfiguration>();
         var svc = new DiagnosticsService(logger, cfgMon);
 
-        svc.RecordFileEvent("/tmp/f1", true, 200);
-        Assert.True(svc.IsFilePosted("/tmp/f1"));
+        string dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try {
+            string successPath = Path.Combine(dir, "f1.txt");
+            string failurePath = Path.Combine(dir, "f2.txt");
+            File.WriteAllText(successPath, "posted content");
+            File.WriteAllText(failurePath, "failed content");
 
-        svc.RecordFileEvent("/tmp/f2", false, null);
-        Assert.False(svc.IsFilePosted("/tmp/f2"));
+            svc.RecordFileEvent(successPath, true, 200);
+            Assert.True(svc.IsFilePosted(successPath));
+
+            svc.RecordFileEvent(failurePath, false, null);
+            Assert.False(svc.IsFilePosted(failurePath));
+        }
+        finally {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void IsFilePosted_does_not_hash_files_without_path_match() {
+        string dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try {
+            string firstPath = Path.Combine(dir, "first.txt");
+            string secondPath = Path.Combine(dir, "second.txt");
+            File.WriteAllText(firstPath, "same content");
+            File.WriteAllText(secondPath, "same content");
+
+            NullLogger<DiagnosticsService> logger = NullLogger<DiagnosticsService>.Instance;
+            var cfgMon = new FileWatchRest.TestUtilities.OptionsMonitorMock<ExternalConfiguration>();
+            var svc = new DiagnosticsService(logger, cfgMon);
+
+            svc.RecordFileEvent(firstPath, true, 200);
+
+            Assert.False(svc.IsFilePosted(secondPath));
+        }
+        finally {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void IsFilePosted_does_not_treat_changed_file_at_same_path_as_posted() {
+        string dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try {
+            string path = Path.Combine(dir, "input.txt");
+            File.WriteAllText(path, "original content");
+
+            NullLogger<DiagnosticsService> logger = NullLogger<DiagnosticsService>.Instance;
+            var cfgMon = new FileWatchRest.TestUtilities.OptionsMonitorMock<ExternalConfiguration>();
+            var svc = new DiagnosticsService(logger, cfgMon);
+
+            svc.RecordFileEvent(path, true, 200);
+            File.WriteAllText(path, "changed content");
+
+            Assert.False(svc.IsFilePosted(path));
+        }
+        finally {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     [Fact]

@@ -6,10 +6,27 @@ namespace FileWatchRest.Services;
 public class DiagnosticsService : IDiagnosticsService {
     /// <summary>
     /// Returns true if the file at the given path has been posted and acknowledged (HTTP 200).
+    /// also does filehash checks on files it finds in the dictionary
     /// </summary>
     /// <param name="path"></param>
-    public bool IsFilePosted(string path) => !string.IsNullOrWhiteSpace(path) && _postedFileStatus.TryGetValue(path, out bool status) && status;
-    private readonly ConcurrentDictionary<string, bool> _postedFileStatus = new(StringComparer.OrdinalIgnoreCase);
+    public bool IsFilePosted(string path) {
+        if (string.IsNullOrWhiteSpace(path)) {
+            return false;
+        }
+
+        if (!_postedFileHashes.TryGetValue(path, out string? postedHash)) {
+            return false;
+        }
+
+        string? fileHash = TryComputeFileHash(path);
+        if (string.IsNullOrWhiteSpace(fileHash)) {
+            return false;
+        }
+
+        return string.Equals(postedHash, fileHash, StringComparison.Ordinal);
+    }
+
+    private readonly ConcurrentDictionary<string, string> _postedFileHashes = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, int> _restartAttempts = new();
     private readonly ConcurrentDictionary<string, byte> _activeWatchers = new();
     private readonly ConcurrentQueue<FileEventRecord> _events = new();
@@ -377,18 +394,19 @@ public class DiagnosticsService : IDiagnosticsService {
     /// <param name="success">True if notification was posted successfully.</param>
     /// <param name="statusCode">HTTP status code, if available.</param>
     public void RecordFileEvent(string path, bool success, int? statusCode) {
-        _events.Enqueue(new FileEventRecord(path, DateTimeOffset.Now, success, statusCode));
+        string? fileHash = TryComputeFileHash(path);
+        _events.Enqueue(new FileEventRecord(path, DateTimeOffset.Now, success, statusCode, fileHash));
         Interlocked.Increment(ref _enqueuedTotal);
         // keep the queue bounded to e.g. 1000 entries
         while (_events.Count > 1000 && _events.TryDequeue(out _)) { }
 
-        // Update per-file post status cache (only mark as posted if HTTP 200)
+        // Only keep a posted marker when the successful file can be identified by content.
         if (!string.IsNullOrWhiteSpace(path)) {
-            if (success && statusCode == 200) {
-                _postedFileStatus[path] = true;
+            if (success && statusCode == 200 && !string.IsNullOrWhiteSpace(fileHash)) {
+                _postedFileHashes[path] = fileHash;
             }
             else if (!success) {
-                _postedFileStatus[path] = false;
+                _postedFileHashes.TryRemove(path, out _);
             }
         }
 
@@ -400,6 +418,24 @@ public class DiagnosticsService : IDiagnosticsService {
         else {
             _processedFailureCounter.Add(1);
             Interlocked.Increment(ref _processedFailureTotal);
+        }
+    }
+
+    private static string? TryComputeFileHash(string path) {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) {
+            return null;
+        }
+
+        try {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            byte[] hash = SHA256.HashData(stream);
+            return Convert.ToHexString(hash);
+        }
+        catch (IOException) {
+            return null;
+        }
+        catch (UnauthorizedAccessException) {
+            return null;
         }
     }
 

@@ -126,6 +126,8 @@ dotnet_diagnostic.IDE0029.severity = warning
 dotnet_diagnostic.IDE0030.severity = warning
 dotnet_diagnostic.IDE0270.severity = warning
 dotnet_diagnostic.IDE0019.severity = warning
+# dotnet_style_prefer_conditional_expression_over_return
+dotnet_diagnostic.IDE0046.severity = none
 
 # # Prefer var when the type is apparent (modern and concise)
 csharp_style_var_when_type_is_apparent = true

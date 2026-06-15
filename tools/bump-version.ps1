@@ -65,9 +65,10 @@ if (-not $versionString) {
 
 # Try parsing as semver first, fallback to version
 $semVer = [semver]::new(0, 0, 0, 0)
+$explicitTarget = -not [string]::IsNullOrWhiteSpace($TargetVersion)
 
 # If a target version was passed positionally, honor it instead of reading/incrementing
-if ($TargetVersion) {
+if ($explicitTarget) {
     $useSemanticVersion = [semver]::TryParse($TargetVersion, [ref]$semVer)
     if (-not $useSemanticVersion) {
         $version = [version]::new()
@@ -91,41 +92,50 @@ else {
 
 # Work with the appropriate version object
 if ($useSemanticVersion) {
-    $oldVersion = $semVer.ToString()
+    $oldVersion = $versionString
 
-    # Determine new version based on parameters
-    if ($Major) {
-        $semVer = [semver]::new($semVer.Major + 1, 0, 0)
-    }
-    elseif ($Minor) {
-        $semVer = [semver]::new($semVer.Major, $semVer.Minor + 1, 0)
-    }
-    else {
-        $semVer = [semver]::new($semVer.Major, $semVer.Minor, $semVer.Patch + 1)
+    if (-not $explicitTarget) {
+        # Determine new version based on parameters
+        if ($Major) {
+            $semVer = [semver]::new($semVer.Major + 1, 0, 0)
+        }
+        elseif ($Minor) {
+            $semVer = [semver]::new($semVer.Major, $semVer.Minor + 1, 0)
+        }
+        else {
+            $semVer = [semver]::new($semVer.Major, $semVer.Minor, $semVer.Patch + 1)
+        }
     }
 
     $newVersionObj = $semVer
 }
 else {
-    $oldVersion = "$($version.Major).$($version.Minor).$($version.Build)"
+    $oldVersion = $versionString
 
-    # Determine new version based on parameters
-    if ($Major) {
-        $version = [version]::new($version.Major + 1, 0, 0)
-    }
-    elseif ($Minor) {
-        $version = [version]::new($version.Major, $version.Minor + 1, 0)
-    }
-    else {
-        $version = [version]::new($version.Major, $version.Minor, $version.Build + 1)
+    if (-not $explicitTarget) {
+        # Determine new version based on parameters
+        if ($Major) {
+            $version = [version]::new($version.Major + 1, 0, 0)
+        }
+        elseif ($Minor) {
+            $version = [version]::new($version.Major, $version.Minor + 1, 0)
+        }
+        else {
+            $version = [version]::new($version.Major, $version.Minor, $version.Build + 1)
+        }
     }
 
     $newVersionObj = $version
 }
 
 $newVersion = $newVersionObj.ToString()
+$baseVersion = $newVersion.Split('+')[0].Split('-')[0]
+$baseParts = @($baseVersion.Split('.'))
+while ($baseParts.Count -lt 3) { $baseParts += '0' }
+$assemblyVersionV = "$($baseParts[0]).$($baseParts[1]).$($baseParts[2]).0"
+$fileVersionV = $assemblyVersionV
 
-Write-Host "Incrementing version: " -NoNewline
+Write-Host "Updating version: " -NoNewline
 Write-Host $oldVersion -ForegroundColor Yellow -NoNewline
 Write-Host " -> " -NoNewline
 Write-Host $newVersion -ForegroundColor Green
@@ -145,17 +155,6 @@ if ($pgs.Count -eq 0) {
     }
 }
 
-# Compute FileVersion value once
-if ($useSemanticVersion) {
-    $baseVer = $newVersionObj.ToString().Split('+')[0].Split('-')[0]
-    $parts = $baseVer.Split('.') | ForEach-Object { $_ }
-    while ($parts.Count -lt 3) { $parts += '0' }
-    $fileVersionV = "$($parts[0]).$($parts[1]).$($parts[2]).0"
-}
-else {
-    $fileVersionV = [version]::new($newVersionObj.Major, $newVersionObj.Minor, $newVersionObj.Build, 0).ToString()
-}
-
 foreach ($propertyGroup in $pgs) {
     # Version
     $vn = $propertyGroup.SelectSingleNode('Version')
@@ -170,10 +169,10 @@ foreach ($propertyGroup in $pgs) {
 
     # AssemblyVersion
     $av = $propertyGroup.SelectSingleNode('AssemblyVersion')
-    if ($null -ne $av) { $av.InnerText = $newVersionObj.ToString() }
+    if ($null -ne $av) { $av.InnerText = $assemblyVersionV }
     else {
         $newAv = $xml.CreateElement('AssemblyVersion')
-        $newAv.InnerText = $newVersionObj.ToString()
+        $newAv.InnerText = $assemblyVersionV
         $propertyGroup.AppendChild($newAv) | Out-Null
     }
 

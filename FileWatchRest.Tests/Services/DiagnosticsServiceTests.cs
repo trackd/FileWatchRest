@@ -6,16 +6,28 @@ public class DiagnosticsServiceTests {
         var opts = new TestOptionsMonitor();
         var svc = new DiagnosticsService(NullLogger<DiagnosticsService>.Instance, opts);
 
-        svc.RecordFileEvent("/tmp/a.txt", true, 200);
-        Assert.True(svc.IsFilePosted("/tmp/a.txt"));
+        string dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try {
+            string successPath = Path.Combine(dir, "a.txt");
+            string failurePath = Path.Combine(dir, "b.txt");
+            File.WriteAllText(successPath, "posted content");
+            File.WriteAllText(failurePath, "failed content");
 
-        svc.RecordFileEvent("/tmp/b.txt", false, 500);
-        Assert.False(svc.IsFilePosted("/tmp/b.txt"));
+            svc.RecordFileEvent(successPath, true, 200);
+            Assert.True(svc.IsFilePosted(successPath));
 
-        IReadOnlyCollection<FileEventRecord> events = svc.GetRecentEvents(10);
-        Assert.NotEmpty(events);
-        string[] expected = ["/tmp/a.txt", "/tmp/b.txt"];
-        Assert.All(expected, e => Assert.Contains(e, events.Select(evt => evt.Path)));
+            svc.RecordFileEvent(failurePath, false, 500);
+            Assert.False(svc.IsFilePosted(failurePath));
+
+            IReadOnlyCollection<FileEventRecord> events = svc.GetRecentEvents(10);
+            Assert.NotEmpty(events);
+            string[] expected = [successPath, failurePath];
+            Assert.All(expected, e => Assert.Contains(e, events.Select(evt => evt.Path)));
+        }
+        finally {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     [Fact]
