@@ -25,8 +25,21 @@ $Parent = Split-Path $PSScriptRoot -Parent
 
 $EnablePublish = $env:CI -or $PublishToGitHub
 $RequestedVersion = $Version
+if (-not $RequestedVersion -and $env:GITHUB_REF -like 'refs/tags/v*') {
+    $RequestedVersion = $env:GITHUB_REF_NAME
+    if (-not $RequestedVersion) {
+        $RequestedVersion = $env:GITHUB_REF.Substring('refs/tags/'.Length)
+    }
+
+    $RequestedVersion = $RequestedVersion.TrimStart('v')
+}
+
 if ($RequestedVersion -and $BumpVersion) {
     Fail 'Use either -Version to set an explicit release version or -BumpVersion to increment the project version, not both.'
+}
+
+if ($BumpVersion -and $env:GITHUB_REF -like 'refs/tags/v*') {
+    Fail 'Refusing to bump version during a tag build. Tag releases must use the tag version.'
 }
 $csprojPath = Join-Path $Parent 'FileWatchRest' 'FileWatchRest.csproj'
 if (-not (Test-Path $csprojPath)) { Fail "Cannot find project file: $csprojPath" }

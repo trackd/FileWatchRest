@@ -79,32 +79,19 @@ if (-not $CommitSha) {
     }
 }
 
-# Determine tags and the previous tag (the tag before HEAD if HEAD is tagged)
+# Determine the previous tag for this release. Prefer the explicit release tag
+# derived from -Version so tag builds compare the intended range even when HEAD
+# has multiple tags or the workflow checks out a detached tag ref.
 $lastTag = $null
+$currentTag = "v$Version"
 try {
-    $tags = @()
-    $rawTags = git for-each-ref --sort=-creatordate --format '%(refname:short)' refs/tags 2>$null
-    if ($rawTags) { $tags = $rawTags -split "`n" | Where-Object { $_ } }
-
-    # Tags pointing at HEAD (may be empty)
-    $currentTagsRaw = git tag --points-at HEAD 2>$null
-    $currentTags = @()
-    if ($currentTagsRaw) { $currentTags = $currentTagsRaw -split "`n" | Where-Object { $_ } }
-
-    if ($currentTags.Count -gt 0 -and $tags.Count -gt 0) {
-        $currentTag = $currentTags[0]
-        $idx = $tags.IndexOf($currentTag)
-        if ($idx -ge 0 -and ($idx + 1) -lt $tags.Count) {
-            $lastTag = $tags[$idx + 1]
-        }
-        else {
-            # No previous tag (this is the first tag)
-            $lastTag = $null
-        }
+    $hasCurrentTag = git rev-parse -q --verify "refs/tags/$currentTag" 2>$null
+    if ($hasCurrentTag) {
+        $lastTag = git describe --tags --abbrev=0 "$currentTag^" 2>$null
     }
     else {
-        # Use the most recent tag as the baseline if HEAD is not tagged
-        if ($tags.Count -gt 0) { $lastTag = $tags[0] }
+        # Untagged local builds compare from the latest reachable tag.
+        $lastTag = git describe --tags --abbrev=0 HEAD 2>$null
     }
 
     if ($lastTag) { Write-Host "Last tag: $lastTag" -ForegroundColor Gray } else { Write-Host "No previous tag found" -ForegroundColor Gray }
@@ -117,8 +104,8 @@ catch {
 $commits = @()
 try {
     if ($lastTag) {
-        # Get commits since last tag
-        $commitList = git log --pretty=format:"- %s (%h)" "$lastTag..HEAD" 2>$null
+        $endRef = if (git rev-parse -q --verify "refs/tags/$currentTag" 2>$null) { $currentTag } else { 'HEAD' }
+        $commitList = git log --pretty=format:"- %s (%h)" "$lastTag..$endRef" 2>$null
     } else {
         # Get last 20 commits if no tags exist
         $commitList = git log --pretty=format:"- %s (%h)" -20 2>$null
