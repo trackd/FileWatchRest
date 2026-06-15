@@ -16,31 +16,41 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-function Fail([string]$msg) { Write-Error $msg; exit 1 }
+function Fail {
+    param(
+        [string]$Message
+    )
+    Write-Error $Message
+    exit 1
+}
 
 # Ensure tooling
-try { dotnet --version | Out-Null } catch { Fail 'dotnet is not available on PATH' }
+try { dotnet --version | Out-Null } catch {
+    Fail 'dotnet is not available on PATH'
+}
 
 $Parent = Split-Path $PSScriptRoot -Parent
 
 $EnablePublish = $env:CI -or $PublishToGitHub
-$RequestedVersion = $Version
-if (-not $RequestedVersion -and $env:GITHUB_REF -like 'refs/tags/v*') {
-    $RequestedVersion = $env:GITHUB_REF_NAME
-    if (-not $RequestedVersion) {
-        $RequestedVersion = $env:GITHUB_REF.Substring('refs/tags/'.Length)
+$TagVersion = $null
+if ($env:GITHUB_REF -like 'refs/tags/v*') {
+    $TagVersion = $env:GITHUB_REF_NAME
+    if (-not $TagVersion) {
+        $TagVersion = $env:GITHUB_REF.Substring('refs/tags/'.Length)
     }
 
-    $RequestedVersion = $RequestedVersion.TrimStart('v')
+    $TagVersion = $TagVersion.TrimStart('v')
 }
 
-if ($RequestedVersion -and $BumpVersion) {
+$RequestedVersion = if ($TagVersion) { $TagVersion } else { $Version }
+if ($BumpVersion -and $TagVersion) {
+    Fail 'Refusing to bump version during a tag build. Tag releases must use the tag version.'
+}
+
+if ($Version -and $BumpVersion) {
     Fail 'Use either -Version to set an explicit release version or -BumpVersion to increment the project version, not both.'
 }
 
-if ($BumpVersion -and $env:GITHUB_REF -like 'refs/tags/v*') {
-    Fail 'Refusing to bump version during a tag build. Tag releases must use the tag version.'
-}
 $csprojPath = Join-Path $Parent 'FileWatchRest' 'FileWatchRest.csproj'
 if (-not (Test-Path $csprojPath)) { Fail "Cannot find project file: $csprojPath" }
 
@@ -48,7 +58,10 @@ if (-not (Test-Path $csprojPath)) { Fail "Cannot find project file: $csprojPath"
 $bumpScript = Join-Path $PSScriptRoot 'bump-version.ps1'
 if (-not (Test-Path $bumpScript)) { Fail "bump-version.ps1 not found at: $bumpScript" }
 
-if ($RequestedVersion) {
+if ($TagVersion) {
+    Write-Host "Using tag version without modifying csproj: $TagVersion" -ForegroundColor Gray
+}
+elseif ($RequestedVersion) {
     Write-Host "Writing requested release version to csproj: $RequestedVersion" -ForegroundColor Gray
     & $bumpScript $RequestedVersion | Out-Null
     [xml]$csproj = Get-Content $csprojPath
@@ -59,8 +72,15 @@ elseif ($BumpVersion) {
     [xml]$csproj = Get-Content $csprojPath
 }
 
-$ResolvedVersion = $csproj.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1
-if (-not $ResolvedVersion) { Fail 'Version not found in csproj; please set <Version> in the project or pass -Version.' }
+$ProjectVersion = $csproj.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1
+$ResolvedVersion = if ($TagVersion) { $TagVersion } else { $ProjectVersion }
+if (-not $ResolvedVersion) {
+    Fail 'Version not found in csproj; please set <Version> in the project or pass -Version.'
+}
+
+if ($TagVersion -and $ProjectVersion -and $ProjectVersion -ne $TagVersion) {
+    Write-Warning "Project version is $ProjectVersion but tag version is $TagVersion. Building release artifacts with tag version $TagVersion; csproj is not modified in CI."
+}
 
 Write-Host "Using version: $ResolvedVersion" -ForegroundColor Cyan
 # Ensure artifacts folder exists
