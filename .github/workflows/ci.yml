@@ -7,12 +7,11 @@ on:
   pull_request:
     branches: [ main ]
 
-permissions:
-  contents: read
-
 jobs:
   build-and-test:
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,12 +26,7 @@ jobs:
       - name: Run release orchestration
         shell: pwsh
         run: |
-          $releaseArgs = @('-PublishToGitHub')
-          if ('${{ github.ref }}'.StartsWith('refs/tags/v')) {
-            $releaseArgs += @('-Version', '${{ github.ref_name }}'.TrimStart('v'))
-          }
-
-          pwsh -NoProfile -ExecutionPolicy Bypass -File ./tools/release.ps1 @releaseArgs
+          pwsh -NoProfile -ExecutionPolicy Bypass -File ./tools/release.ps1 -PublishToGitHub
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -50,10 +44,42 @@ jobs:
           name: codecov-filewatchrest
           fail_ci_if_error: false
 
+  sync-release-version:
+    name: Sync release version to main
+    runs-on: windows-latest
+    needs: build-and-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sync csproj version from tag
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          pwsh -NoProfile -ExecutionPolicy Bypass -File ./tools/bump-version.ps1 $version
+
+          git config user.name 'trackd'
+          git config user.email '17672644+trackd@users.noreply.github.com'
+
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Project version already matches $version"
+            exit 0
+          }
+
+          git commit --amend --no-edit --no-verify
+          git push --force-with-lease origin HEAD:main
+
   create-release:
     name: Create GitHub Release
     runs-on: windows-latest
-    needs: build-and-test
+    needs: [build-and-test, sync-release-version]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
